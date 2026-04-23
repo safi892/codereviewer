@@ -1,0 +1,108 @@
+{
+    "name": "Light Default",
+    "type": "light",
+    "colors": {
+        "editor.background": "#ffffff",
+        "editor.foreground": "#333333",
+        "activityBar.background": "#f3f3f3",
+        "sideBar.background": "#f3f3f3"
+    },
+    "tokenColors": [
+        {
+            "scope": "source.cpp",
+            "settings": {
+                "foreground": "#333333"
+            }
+        },
+        {
+            "scope": ["keyword", "storage.type", "storage.modifier"],
+            "settings": {
+                "foreground": "#0000ff"
+            }
+        },
+        {
+            "scope": ["keyword.control", "keyword.operator"],
+            "settings": {
+                "foreground": "#af00db"
+            }
+        },
+        {
+            "scope": "string",
+            "settings": {
+                "foreground": "#a31515"
+            }
+        },
+        {
+            "scope": "number",
+            "settings": {
+                "foreground": "#098658"
+            }
+        },
+        {
+            "scope": "comment",
+            "settings": {
+                "foreground": "#008000"
+            }
+        },
+        {
+            "scope": "type",
+            "settings": {
+                "foreground": "#267f99"
+            }
+        },
+        {
+            "scope": "class",
+            "settings": {
+                "foreground": "#267f99"
+            }
+        },
+        {
+            "scope": "function",
+            "settings": {
+                "foreground": "#795E26"
+            }
+        },
+        {
+            "scope": "variable",
+            "settings": {
+                "foreground": "#001080"
+            }
+        },
+        {
+            "scope": "parameter",
+            "settings": {
+                "foreground": "#001080"
+            }
+        },
+        {
+            "scope": "constant",
+            "settings": {
+                "foreground": "#0000ff"
+            }
+        },
+        {
+            "scope": "preprocessor",
+            "settings": {
+                "foreground": "#af00db"
+            }
+        },
+        {
+            "scope": "operator",
+            "settings": {
+                "foreground": "#333333"
+            }
+        },
+        {
+            "scope": "punctuation",
+            "settings": {
+                "foreground": "#333333"
+            }
+        },
+        {
+            "scope": "bracket",
+            "settings": {
+                "foreground": "#333333"
+            }
+        }
+    ]
+}

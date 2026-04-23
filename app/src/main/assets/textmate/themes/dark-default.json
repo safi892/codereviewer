@@ -1,0 +1,128 @@
+{
+    "name": "Dark Default",
+    "type": "dark",
+    "colors": {
+        "editor.background": "#1e1e1e",
+        "editor.foreground": "#d4d4d4",
+        "activityBar.background": "#1e1e1e",
+        "sideBar.background": "#252526",
+        "statusBar.background": "#007acc",
+        "statusBar.foreground": "#ffffff"
+    },
+    "tokenColors": [
+        {
+            "scope": "source.cpp",
+            "settings": {
+                "foreground": "#d4d4d4"
+            }
+        },
+        {
+            "scope": ["keyword", "storage.type", "storage.modifier"],
+            "settings": {
+                "foreground": "#569cd6"
+            }
+        },
+        {
+            "scope": ["keyword.control", "keyword.operator"],
+            "settings": {
+                "foreground": "#c586c0"
+            }
+        },
+        {
+            "scope": "string",
+            "settings": {
+                "foreground": "#ce9178"
+            }
+        },
+        {
+            "scope": "number",
+            "settings": {
+                "foreground": "#b5cea8"
+            }
+        },
+        {
+            "scope": "comment",
+            "settings": {
+                "foreground": "#6a9955"
+            }
+        },
+        {
+            "scope": "type",
+            "settings": {
+                "foreground": "#4ec9b0"
+            }
+        },
+        {
+            "scope": "class",
+            "settings": {
+                "foreground": "#4ec9b0"
+            }
+        },
+        {
+            "scope": "function",
+            "settings": {
+                "foreground": "#dcdcaa"
+            }
+        },
+        {
+            "scope": "variable",
+            "settings": {
+                "foreground": "#9cdcfe"
+            }
+        },
+        {
+            "scope": "parameter",
+            "settings": {
+                "foreground": "#9cdcfe"
+            }
+        },
+        {
+            "scope": "constant",
+            "settings": {
+                "foreground": "#569cd6"
+            }
+        },
+        {
+            "scope": "preprocessor",
+            "settings": {
+                "foreground": "#d7ba7d"
+            }
+        },
+        {
+            "scope": "operator",
+            "settings": {
+                "foreground": "#d4d4d4"
+            }
+        },
+        {
+            "scope": "punctuation",
+            "settings": {
+                "foreground": "#d4d4d4"
+            }
+        },
+        {
+            "scope": "bracket",
+            "settings": {
+                "foreground": "#ffd700"
+            }
+        },
+        {
+            "scope": "tag",
+            "settings": {
+                "foreground": "#569cd6"
+            }
+        },
+        {
+            "scope": "attribute.name",
+            "settings": {
+                "foreground": "#9cdcfe"
+            }
+        },
+        {
+            "scope": "attribute.value",
+            "settings": {
+                "foreground": "#ce9178"
+            }
+        }
+    ]
+}
