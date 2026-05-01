@@ -91,7 +91,7 @@ object EditorSetup {
             }
 
             // 4. Basic editor settings
-            editor.isWordwrap = false
+            editor.isWordwrap = true
             editor.setPinLineNumber(true)
             editor.setTextSize(14f)
             

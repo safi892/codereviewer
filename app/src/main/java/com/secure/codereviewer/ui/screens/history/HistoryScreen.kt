@@ -3,7 +3,7 @@ package com.secure.codereviewer.ui.screens.history
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
@@ -12,37 +12,45 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.secure.codereviewer.ui.components.AnalysisHistoryItem
-import com.secure.codereviewer.ui.screens.LastOpenedFile
+import com.secure.codereviewer.ui.screens.RecentSavedFile
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
-    lastOpenedFile: LastOpenedFile?,
-    onItemClick: (LastOpenedFile) -> Unit
+    recentFiles: List<RecentSavedFile>,
+    onItemClick: (RecentSavedFile) -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    val filteredFiles = if (query.isBlank()) {
+        recentFiles
+    } else {
+        recentFiles.filter { it.name.contains(query, ignoreCase = true) }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
+
                     Text(
                         "Analysis History", 
-                        style = MaterialTheme.typography.titleLarge, 
+                        style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Bold
                     )
                 },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Icon(Icons.Default.FilterList, contentDescription = "Filter")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
+//                actions = {
+//                    IconButton(onClick = { }) {
+//                        Icon(Icons.Default.FilterList, contentDescription = "Filter")
+//                    }
+//                },
+//                colors = TopAppBarDefaults.topAppBarColors(
+//                    containerColor = MaterialTheme.colorScheme.background,
+//                    titleContentColor = MaterialTheme.colorScheme.onBackground
+//                )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
@@ -95,24 +103,26 @@ fun HistoryScreen(
                     )
                 }
 
-                if (lastOpenedFile == null) {
+                if (filteredFiles.isEmpty()) {
                     item {
                         EmptyHistoryState()
                     }
                 } else {
-                    item {
-                        val relativeTime = formatRelativeTime(lastOpenedFile.openedAtEpochMs)
+                    itemsIndexed(filteredFiles) { index, recentFile ->
+                        val relativeTime = formatRelativeTime(recentFile.savedAtEpochMs)
                         AnalysisHistoryItem(
-                            name = lastOpenedFile.name,
-                            date = "Last opened $relativeTime",
-                            status = "Recent",
+                            name = recentFile.name,
+                            date = "Saved $relativeTime",
+                            status = "Saved",
                             statusColor = MaterialTheme.colorScheme.primary,
-                            onClick = { onItemClick(lastOpenedFile) }
+                            onClick = { onItemClick(recentFile) }
                         )
-                        Divider(
-                            modifier = Modifier.padding(horizontal = 24.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-                        )
+                        if (index < filteredFiles.lastIndex) {
+                            Divider(
+                                modifier = Modifier.padding(horizontal = 24.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            )
+                        }
                     }
                 }
             }
@@ -135,7 +145,7 @@ private fun EmptyHistoryState() {
             color = MaterialTheme.colorScheme.onSurface
         )
         Text(
-            text = "Open a file in the editor to see it here.",
+            text = "Save a file in the editor to see it here.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

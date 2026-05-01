@@ -26,7 +26,11 @@ import com.secure.codereviewer.util.EditorSetup
 @Composable
 fun EditorScreen(
     onBack: () -> Unit,
-    onFileOpened: (String) -> Unit
+    onFileSaved: (String) -> Unit,
+    initialContent: String? = null,
+    initialFileName: String? = null,
+    initialContentKey: Int = 0,
+    onInitialContentConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val activity = context as? Activity
@@ -38,7 +42,6 @@ fun EditorScreen(
     ) { uri: Uri? ->
         if (activity != null && uri != null) {
             editorViewModel.loadFile(uri, activity)
-            onFileOpened(editorViewModel.currentFileName)
         }
     }
 
@@ -46,8 +49,19 @@ fun EditorScreen(
         ActivityResultContracts.CreateDocument("text/x-c++src")
     ) { uri: Uri? ->
         if (activity != null && uri != null) {
-            editorViewModel.saveToUri(uri, activity)
-            onFileOpened(editorViewModel.currentFileName)
+            if (editorViewModel.saveToUri(uri, activity)) {
+                onFileSaved(editorViewModel.currentFileName)
+            }
+        }
+    }
+
+    LaunchedEffect(initialContentKey) {
+        if (initialContent != null) {
+            editorViewModel.openContent(
+                content = initialContent,
+                fileName = initialFileName ?: "pasted-code.cpp"
+            )
+            onInitialContentConsumed()
         }
     }
 
@@ -97,8 +111,9 @@ fun EditorScreen(
                     IconButton(
                         onClick = {
                             if (activity != null) {
-                                editorViewModel.saveCurrentFile(activity)
-                                onFileOpened(editorViewModel.currentFileName)
+                                if (editorViewModel.saveCurrentFile(activity)) {
+                                    onFileSaved(editorViewModel.currentFileName)
+                                }
                             }
                         },
                         enabled = editorViewModel.currentUri != null
@@ -147,7 +162,10 @@ fun EditorScreen(
                     .background(MaterialTheme.colorScheme.surface)
             )
 
-            if (editorViewModel.lastExplanation != null || editorViewModel.analysisError != null) {
+            val showExplanationPanel = false
+            if (showExplanationPanel &&
+                (editorViewModel.lastExplanation != null || editorViewModel.analysisError != null)
+            ) {
                 ExplanationPanel(
                     explanation = editorViewModel.lastExplanation,
                     errorMessage = editorViewModel.analysisError
@@ -185,7 +203,7 @@ fun EditorScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Re-analyze Code", fontWeight = FontWeight.Bold)
+                        Text("Analyze Code", fontWeight = FontWeight.Bold)
                     }
                 }
             }

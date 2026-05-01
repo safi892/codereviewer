@@ -1,6 +1,6 @@
 package com.secure.codereviewer.ui.screens
 
-data class LastOpenedFile(
+data class RecentSavedFile(
     val name: String,
-    val openedAtEpochMs: Long
+    val savedAtEpochMs: Long
 )

@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.secure.codereviewer.ui.components.FeatureBadge
 
 @Composable
-fun WelcomeScreen(onStart: () -> Unit) {
+fun WelcomeScreen(onStart: () -> Unit, onLoginClick: () -> Unit) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->

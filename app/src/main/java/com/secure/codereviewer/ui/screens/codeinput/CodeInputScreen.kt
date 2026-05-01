@@ -1,5 +1,8 @@
 package com.secure.codereviewer.ui.screens.codeinput
 
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.secure.codereviewer.ui.components.UploadCard
@@ -22,9 +26,48 @@ import com.secure.codereviewer.ui.components.UploadCard
 @Composable
 fun CodeInputScreen(
     onBack: () -> Unit,
-    onAnalyze: (String) -> Unit
+    onAnalyze: (code: String, fileName: String?) -> Unit
 ) {
+    val context = LocalContext.current
     var code by remember { mutableStateOf("") }
+    var selectedFileName by remember { mutableStateOf<String?>(null) }
+    var fileError by remember { mutableStateOf<String?>(null) }
+
+    val openFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        try {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        } catch (_: SecurityException) {
+            // Some providers do not grant persistable access; immediate read still works.
+        }
+
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                code = input.bufferedReader().readText()
+                selectedFileName = context.contentResolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+                } ?: uri.lastPathSegment?.substringAfterLast('/')
+                fileError = null
+            } ?: run {
+                fileError = "Could not open selected file."
+            }
+        } catch (e: Exception) {
+            fileError = e.message ?: "Could not read selected file."
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -73,10 +116,11 @@ fun CodeInputScreen(
                         Text("Cancel", fontWeight = FontWeight.SemiBold)
                     }
                     Button(
-                        onClick = { onAnalyze(code) },
+                        onClick = { onAnalyze(code, selectedFileName) },
                         modifier = Modifier
                             .weight(1.5f)
                             .height(56.dp),
+                        enabled = code.isNotBlank(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         ),
@@ -102,7 +146,43 @@ fun CodeInputScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            UploadCard(onBrowse = {})
+            UploadCard(
+                onBrowse = {
+                    openFileLauncher.launch(
+                        arrayOf(
+                            "text/plain",
+                            "text/x-c++src",
+                            "text/x-c++hdr",
+                            "text/*",
+                            "application/octet-stream"
+                        )
+                    )
+                }
+            )
+
+            if (selectedFileName != null || fileError != null) {
+                Surface(
+                    color = if (fileError == null) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = fileError ?: "Loaded $selectedFileName",
+                        modifier = Modifier.padding(12.dp),
+                        color = if (fileError == null) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.error
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

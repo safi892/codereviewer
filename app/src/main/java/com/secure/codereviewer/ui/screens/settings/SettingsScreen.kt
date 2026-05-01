@@ -11,18 +11,30 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.secure.codereviewer.data.api.AuthManager
+import com.secure.codereviewer.data.repository.AuthRepository
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onLogout: () -> Unit = {},
+    onOpenPrivacyPolicy: () -> Unit = {}
+) {
+    var isLoggingOut by remember { mutableStateOf(false) }
+    var notificationsEnabled by rememberSaveable { mutableStateOf(true) }
+    val coroutineScope = rememberCoroutineScope()
+    val authRepository = remember { AuthRepository() }
+
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Text(
                         "Settings", 
@@ -57,11 +69,12 @@ fun SettingsScreen() {
                     subtitle = "Theme, font size, and animations",
                     onClick = {}
                 )
-                SettingsItem(
+                SettingsToggleItem(
                     icon = Icons.Default.Notifications,
                     title = "Notifications",
                     subtitle = "Alerts and analysis completions",
-                    onClick = {}
+                    checked = notificationsEnabled,
+                    onCheckedChange = { notificationsEnabled = it }
                 )
             }
 
@@ -73,12 +86,12 @@ fun SettingsScreen() {
                     subtitle = "Style, auto-save, and diagnostics",
                     onClick = {}
                 )
-                SettingsItem(
-                    icon = Icons.Default.Storage,
-                    title = "Model selection",
-                    subtitle = "CodeLlama-70b (Default)",
-                    onClick = {}
-                )
+//                SettingsItem(
+//                    icon = Icons.Default.Storage,
+//                    title = "Model selection",
+//                    subtitle = "CodeLlama-70b (Default)",
+//                    onClick = {}
+//                )
             }
 
             // About Section
@@ -92,19 +105,61 @@ fun SettingsScreen() {
                 )
                 SettingsItem(
                     icon = Icons.Default.Security,
-                    title = "Privacy & Security",
-                    subtitle = "Data encryption and audit logs",
-                    onClick = {}
+                    title = "Privacy Policy",
+                    subtitle = "How CppLens handles your data",
+                    onClick = onOpenPrivacyPolicy
                 )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
+
+            // Logout Button
+            Button(
+                onClick = {
+                    isLoggingOut = true
+                    coroutineScope.launch {
+                        authRepository.logout()
+                        onLogout()
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                shape = RoundedCornerShape(12.dp),
+                enabled = !isLoggingOut
+            ) {
+                if (isLoggingOut) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Logout, contentDescription = "Logout")
+                        Text(
+                            "Logout",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun SettingsProfileHeader() {
+    val userName = AuthManager.getUserName() ?: "User"
+    val userEmail = AuthManager.getUserEmail() ?: "user@example.com"
+
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(20.dp),
@@ -131,13 +186,13 @@ private fun SettingsProfileHeader() {
             Spacer(modifier = Modifier.width(16.dp))
             Column {
                 Text(
-                    "Senior Developer", 
+                    userName, 
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    "dev.enterprise@cpplens.ai", 
+                    userEmail, 
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -221,5 +276,55 @@ private fun SettingsItem(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
             )
         }
+    }
+}
+
+@Composable
+private fun SettingsToggleItem(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            modifier = Modifier.size(40.dp),
+            color = MaterialTheme.colorScheme.background,
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange
+        )
     }
 }

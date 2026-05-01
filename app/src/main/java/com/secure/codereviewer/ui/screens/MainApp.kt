@@ -13,34 +13,45 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.secure.codereviewer.data.api.AuthManager
 import com.secure.codereviewer.ui.components.AppBottomNavigation
 import com.secure.codereviewer.ui.screens.codeinput.CodeInputScreen
 import com.secure.codereviewer.ui.screens.dashboard.DashboardScreen
 import com.secure.codereviewer.ui.screens.editor.EditorScreen
 import com.secure.codereviewer.ui.screens.history.HistoryScreen
+import com.secure.codereviewer.ui.screens.privacy.PrivacyPolicyScreen
 import com.secure.codereviewer.ui.screens.settings.SettingsScreen
+import com.secure.codereviewer.ui.screens.welcome.LoginScreen
+import com.secure.codereviewer.ui.screens.welcome.SignupScreen
 import com.secure.codereviewer.ui.screens.welcome.WelcomeScreen
 import kotlinx.coroutines.delay
 
 enum class Screen {
     Splash,
     Welcome,
+    Login,
+    Signup,
     Dashboard,
     History,
     CodeInput,
     Editor,
-    Settings
+    Settings,
+    PrivacyPolicy
 }
 
 @Composable
 fun CodeReviewerApp() {
     var currentScreen by remember { mutableStateOf(Screen.Splash) }
-    var lastOpenedFile by remember { mutableStateOf<LastOpenedFile?>(null) }
+    var recentSavedFiles by remember { mutableStateOf(listOf<RecentSavedFile>()) }
+    var pendingEditorContent by remember { mutableStateOf<String?>(null) }
+    var pendingEditorFileName by remember { mutableStateOf<String?>(null) }
+    var pendingEditorContentKey by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(currentScreen) {
         if (currentScreen == Screen.Splash) {
             delay(1200)
-            currentScreen = Screen.Welcome
+            // Check if user is already logged in
+            currentScreen = if (AuthManager.isLoggedIn()) Screen.Dashboard else Screen.Welcome
         }
     }
 
@@ -66,29 +77,63 @@ fun CodeReviewerApp() {
         )) {
             when (currentScreen) {
                 Screen.Splash -> SplashScreen()
-                Screen.Welcome -> WelcomeScreen(onStart = { currentScreen = Screen.Dashboard })
+                Screen.Welcome -> WelcomeScreen(
+                    onStart = { currentScreen = Screen.Login },
+                    onLoginClick = { currentScreen = Screen.Login }
+                )
+                Screen.Login -> LoginScreen(
+                    onLoginSuccess = { currentScreen = Screen.Dashboard },
+                    onSignupClick = { currentScreen = Screen.Signup }
+                )
+                Screen.Signup -> SignupScreen(
+                    onSignupSuccess = { currentScreen = Screen.Dashboard },
+                    onLoginClick = { currentScreen = Screen.Login }
+                )
                 Screen.Dashboard -> DashboardScreen(
                     onNewAnalysis = { currentScreen = Screen.CodeInput },
                     onOpenEditor = { currentScreen = Screen.Editor }
                 )
                 Screen.History -> HistoryScreen(
-                    lastOpenedFile = lastOpenedFile,
+                    recentFiles = recentSavedFiles,
                     onItemClick = { currentScreen = Screen.Editor }
                 )
                 Screen.CodeInput -> CodeInputScreen(
                     onBack = { currentScreen = Screen.Dashboard },
-                    onAnalyze = { currentScreen = Screen.Editor }
+                    onAnalyze = { code, fileName ->
+                        pendingEditorContent = code
+                        pendingEditorFileName = fileName ?: "pasted-code.cpp"
+                        pendingEditorContentKey += 1
+                        currentScreen = Screen.Editor
+                    }
                 )
                 Screen.Editor -> EditorScreen(
                     onBack = { currentScreen = Screen.Dashboard },
-                    onFileOpened = { fileName ->
-                        lastOpenedFile = LastOpenedFile(
+                    onFileSaved = { fileName ->
+                        val newEntry = RecentSavedFile(
                             name = fileName,
-                            openedAtEpochMs = System.currentTimeMillis()
+                            savedAtEpochMs = System.currentTimeMillis()
                         )
+                        recentSavedFiles = listOf(newEntry) +
+                            recentSavedFiles.filterNot { it.name == fileName }
+                    },
+                    initialContent = pendingEditorContent,
+                    initialFileName = pendingEditorFileName,
+                    initialContentKey = pendingEditorContentKey,
+                    onInitialContentConsumed = {
+                        pendingEditorContent = null
+                        pendingEditorFileName = null
                     }
                 )
-                Screen.Settings -> SettingsScreen()
+                Screen.Settings -> SettingsScreen(
+                    onLogout = { 
+                        AuthManager.logout()
+                        currentScreen = Screen.Welcome 
+                    },
+                    onOpenPrivacyPolicy = { currentScreen = Screen.PrivacyPolicy }
+                )
+                Screen.PrivacyPolicy -> PrivacyPolicyScreen(
+                    onBack = { currentScreen = Screen.Settings }
+                )
             }
         }
     }

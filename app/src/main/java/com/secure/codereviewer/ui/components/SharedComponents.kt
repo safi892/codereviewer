@@ -343,18 +343,18 @@ fun WelcomeCard() {
                         fontWeight = FontWeight.ExtraBold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        color = Color.White.copy(alpha = 0.2f),
-                        shape = CircleShape
-                    ) {
-                        Text(
-                            "Pro Plan Active",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+//                    Surface(
+//                        color = Color.White.copy(alpha = 0.2f),
+//                        shape = CircleShape
+//                    ) {
+//                        Text(
+//                            "Pro Plan Active",
+//                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+//                            color = Color.White,
+//                            style = MaterialTheme.typography.labelSmall,
+//                            fontWeight = FontWeight.Bold
+//                        )
+//                    }
                 }
                 Surface(
                     modifier = Modifier.size(64.dp),

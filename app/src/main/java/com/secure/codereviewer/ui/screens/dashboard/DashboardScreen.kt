@@ -36,36 +36,36 @@ fun DashboardScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                 },
-                actions = {
-                    IconButton(onClick = { }) {
-                        Surface(
-                            modifier = Modifier.size(36.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                            shape = CircleShape
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Notifications, 
-                                    contentDescription = "Notifications",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-//                    Surface(
-//                        modifier = Modifier.size(36.dp).padding(end = 12.dp),
-//                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
-//                        shape = CircleShape
-//                    ) {
-//                        // Profile placeholder
+//                actions = {
+//                    IconButton(onClick = { }) {
+//                        Surface(
+//                            modifier = Modifier.size(36.dp),
+//                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+//                            shape = CircleShape
+//                        ) {
+//                            Box(contentAlignment = Alignment.Center) {
+//                                Icon(
+//                                    Icons.Default.Notifications,
+//                                    contentDescription = "Notifications",
+//                                    tint = MaterialTheme.colorScheme.primary,
+//                                    modifier = Modifier.size(20.dp)
+//                                )
+//                            }
+//                        }
 //                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.primary
-                )
+//                    Spacer(modifier = Modifier.width(8.dp))
+////                    Surface(
+////                        modifier = Modifier.size(36.dp).padding(end = 12.dp),
+////                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f),
+////                        shape = CircleShape
+////                    ) {
+////                        // Profile placeholder
+////                    }
+//                },
+//                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+//                    containerColor = MaterialTheme.colorScheme.background,
+//                    titleContentColor = MaterialTheme.colorScheme.primary
+//                )
             )
         },
         containerColor = MaterialTheme.colorScheme.background
