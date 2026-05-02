@@ -3,6 +3,7 @@ package com.secure.codereviewer.data.api
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Query
 import retrofit2.Response
 
 interface CodeApiService {
@@ -28,4 +29,10 @@ interface CodeApiService {
     suspend fun analyzeCode(
         @Body request: AnalyzeRequest
     ): Response<AnalyzeResponse>
+
+    @GET("analyze/history")
+    suspend fun getHistory(
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0
+    ): Response<HistoryListResponse>
 }

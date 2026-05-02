@@ -19,6 +19,7 @@ import com.secure.codereviewer.ui.screens.codeinput.CodeInputScreen
 import com.secure.codereviewer.ui.screens.dashboard.DashboardScreen
 import com.secure.codereviewer.ui.screens.editor.EditorScreen
 import com.secure.codereviewer.ui.screens.history.HistoryScreen
+import com.secure.codereviewer.ui.screens.history.HistoryUiItem
 import com.secure.codereviewer.ui.screens.privacy.PrivacyPolicyScreen
 import com.secure.codereviewer.ui.screens.settings.SettingsScreen
 import com.secure.codereviewer.ui.screens.welcome.LoginScreen
@@ -42,7 +43,6 @@ enum class Screen {
 @Composable
 fun CodeReviewerApp() {
     var currentScreen by remember { mutableStateOf(Screen.Splash) }
-    var recentSavedFiles by remember { mutableStateOf(listOf<RecentSavedFile>()) }
     var pendingEditorContent by remember { mutableStateOf<String?>(null) }
     var pendingEditorFileName by remember { mutableStateOf<String?>(null) }
     var pendingEditorContentKey by remember { mutableIntStateOf(0) }
@@ -94,8 +94,12 @@ fun CodeReviewerApp() {
                     onOpenEditor = { currentScreen = Screen.Editor }
                 )
                 Screen.History -> HistoryScreen(
-                    recentFiles = recentSavedFiles,
-                    onItemClick = { currentScreen = Screen.Editor }
+                    onItemClick = { historyItem ->
+                        pendingEditorContent = buildHistoryContent(historyItem)
+                        pendingEditorFileName = "analysis-${historyItem.id}.cpp"
+                        pendingEditorContentKey += 1
+                        currentScreen = Screen.Editor
+                    }
                 )
                 Screen.CodeInput -> CodeInputScreen(
                     onBack = { currentScreen = Screen.Dashboard },
@@ -108,14 +112,7 @@ fun CodeReviewerApp() {
                 )
                 Screen.Editor -> EditorScreen(
                     onBack = { currentScreen = Screen.Dashboard },
-                    onFileSaved = { fileName ->
-                        val newEntry = RecentSavedFile(
-                            name = fileName,
-                            savedAtEpochMs = System.currentTimeMillis()
-                        )
-                        recentSavedFiles = listOf(newEntry) +
-                            recentSavedFiles.filterNot { it.name == fileName }
-                    },
+                    onFileSaved = { _ -> },
                     initialContent = pendingEditorContent,
                     initialFileName = pendingEditorFileName,
                     initialContentKey = pendingEditorContentKey,
@@ -183,4 +180,16 @@ private fun SplashScreen() {
                 )
         }
     }
+}
+
+private fun buildHistoryContent(item: HistoryUiItem): String {
+    val explanation = item.explanation
+        .trim()
+        .lines()
+        .filter { it.isNotBlank() }
+        .joinToString("\n") { line -> "// ${line.trim()}" }
+    val code = item.commentedCode.trim()
+    return listOf(explanation, code)
+        .filter { it.isNotBlank() }
+        .joinToString("\n\n")
 }
