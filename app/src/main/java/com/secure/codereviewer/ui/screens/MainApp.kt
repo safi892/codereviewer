@@ -108,6 +108,12 @@ fun CodeReviewerApp() {
                         pendingEditorFileName = fileName ?: "pasted-code.cpp"
                         pendingEditorContentKey += 1
                         currentScreen = Screen.Editor
+                    },
+                    onOpenEditor = { code, fileName ->
+                        pendingEditorContent = code
+                        pendingEditorFileName = fileName
+                        pendingEditorContentKey += 1
+                        currentScreen = Screen.Editor
                     }
                 )
                 Screen.Editor -> EditorScreen(
@@ -183,13 +189,38 @@ private fun SplashScreen() {
 }
 
 private fun buildHistoryContent(item: HistoryUiItem): String {
-    val explanation = item.explanation
-        .trim()
-        .lines()
-        .filter { it.isNotBlank() }
-        .joinToString("\n") { line -> "// ${line.trim()}" }
     val code = item.commentedCode.trim()
-    return listOf(explanation, code)
+    val explanation = item.explanation.trim()
+    
+    val codeLines = code.lines()
+    val firstFunctionIndex = codeLines.indexOfFirst { line ->
+        val trimmed = line.trim()
+        trimmed.isNotEmpty() &&
+            "(" in trimmed &&
+            !trimmed.startsWith("//") &&
+            !trimmed.startsWith("/*") &&
+            !trimmed.startsWith("*")
+    }
+    
+    val header = if (firstFunctionIndex > 0) {
+        codeLines.take(firstFunctionIndex).joinToString("\n").trimEnd()
+    } else {
+        ""
+    }
+    
+    val body = if (firstFunctionIndex >= 0) {
+        codeLines.drop(firstFunctionIndex).joinToString("\n")
+    } else {
+        code
+    }
+    
+    val explanationBlock = if (explanation.isNotBlank()) {
+        explanation.lines().filter { it.isNotBlank() }.joinToString("\n") { "// $it" }
+    } else {
+        ""
+    }
+    
+    return listOf(header, explanationBlock, body)
         .filter { it.isNotBlank() }
         .joinToString("\n\n")
 }

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +27,8 @@ import com.secure.codereviewer.ui.components.UploadCard
 @Composable
 fun CodeInputScreen(
     onBack: () -> Unit,
-    onAnalyze: (code: String, fileName: String?) -> Unit
+    onAnalyze: (code: String, fileName: String?) -> Unit,
+    onOpenEditor: (code: String, fileName: String?) -> Unit
 ) {
     val context = LocalContext.current
     var code by remember { mutableStateOf("") }
@@ -212,6 +214,29 @@ fun CodeInputScreen(
                     ),
                     textStyle = MaterialTheme.typography.bodyMedium
                 )
+
+                OutlinedButton(
+                    onClick = { onOpenEditor(code, selectedFileName) },
+                    enabled = code.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(
+                        Icons.Default.Code,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = if (code.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Open in Editor",
+                        color = if (code.isNotBlank()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(20.dp))

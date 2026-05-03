@@ -38,7 +38,14 @@ class HistoryViewModel : ViewModel() {
 
     fun loadInitial() {
         if (items.isNotEmpty() || isLoading) return
-        fetch(reset = true)
+        viewModelScope.launch {
+            val localResponse = repository.getLocalHistory()
+            if (localResponse != null) {
+                items = localResponse.items.map(::toUiItem)
+                hasMore = false
+            }
+            fetch(reset = true)
+        }
     }
 
     fun refresh() {
@@ -67,7 +74,18 @@ class HistoryViewModel : ViewModel() {
                 offset += newItems.size
                 hasMore = items.size < response.total
             } catch (e: Exception) {
-                errorMessage = e.message ?: "Failed to load history"
+                if (items.isEmpty()) {
+                    val localResponse = repository.getLocalHistory()
+                    if (localResponse != null) {
+                        items = localResponse.items.map(::toUiItem)
+                        hasMore = false
+                        errorMessage = "Showing cached history (offline)"
+                    } else {
+                        errorMessage = e.message ?: "Failed to load history"
+                    }
+                } else {
+                    errorMessage = e.message
+                }
             } finally {
                 isLoading = false
             }

@@ -2,6 +2,7 @@ package com.secure.codereviewer.data.repository
 
 import com.secure.codereviewer.data.api.AnalyzeRequest
 import com.secure.codereviewer.data.api.AnalyzeResponse
+import com.secure.codereviewer.data.api.AuthManager
 import com.secure.codereviewer.data.api.HistoryListResponse
 import com.secure.codereviewer.data.api.RetrofitClient
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,11 @@ class CodeRepository {
         try {
             val response = RetrofitClient.api.getHistory(limit = limit, offset = offset)
             if (response.isSuccessful) {
-                response.body() ?: throw Exception("Empty response from server")
+                val body = response.body() ?: throw Exception("Empty response from server")
+                if (offset == 0) {
+                    AuthManager.saveHistoryCache(body.items, body.total)
+                }
+                body
             } else {
                 val message = when (response.code()) {
                     401 -> "Session expired. Please log in again."
@@ -37,5 +42,15 @@ class CodeRepository {
         } catch (e: SocketTimeoutException) {
             throw Exception("History request timed out. Please try again.", e)
         }
+    }
+
+    fun getLocalHistory(): HistoryListResponse? {
+        val cached = AuthManager.getHistoryCache() ?: return null
+        return HistoryListResponse(
+            items = cached.first,
+            total = cached.second,
+            limit = 20,
+            offset = 0
+        )
     }
 }
