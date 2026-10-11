@@ -14,7 +14,6 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -32,13 +31,10 @@ import com.secure.codereviewer.ui.theme.*
 
 /**
  * DocumentationScreen:
- * A dedicated, professional screen that displays the full analysis and optimization results:
- * - Clean overview header with verified badges and speedup metrics.
- * - Unified stacked layout (like Web): Explanation first at top, followed by C++ Code.
- * - Interactive Segmented Tabs:
- *     1. Overview (Explanation + Code stacked together, default web-style view)
- *     2. Explanation (Focused deep-dive)
- *     3. Code (Source code view with toggle between optimized and commented)
+ * A dedicated, clean, professional screen that displays the full analysis and optimization results:
+ * - Direct Tab Row at the top without clutter.
+ * - Unified stacked layout: Explanation on top, followed immediately by C++ Code.
+ * - Clean light-mode design matching the application theme.
  * - Quick copy actions for individual sections or full report.
  * - One-tap action to return to the editor with the chosen code loaded.
  */
@@ -151,16 +147,7 @@ fun DocumentationScreen(
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            // Top metadata card
-            MetadataHeaderCard(
-                fileName = fileName,
-                hasOptimization = hasOptimization,
-                optimizationVerified = optimizationVerified,
-                speedup = speedup,
-                optimizationNote = optimizationNote
-            )
-
-            // Primary Navigation Tabs
+            // Primary Navigation Tabs directly under top app bar (clean & modern)
             TabRow(
                 selectedTabIndex = selectedTabIndex,
                 containerColor = CppThemeSurface,
@@ -206,6 +193,7 @@ fun DocumentationScreen(
                         hasOptimization = hasOptimization,
                         optimizationVerified = optimizationVerified,
                         speedup = speedup,
+                        optimizationNote = optimizationNote,
                         bothAvailable = bothAvailable,
                         isViewingCommented = isViewingCommented,
                         onToggleCodeView = { isViewingCommented = it }
@@ -216,6 +204,7 @@ fun DocumentationScreen(
                         hasOptimization = hasOptimization,
                         optimizationVerified = optimizationVerified,
                         speedup = speedup,
+                        optimizationNote = optimizationNote,
                         bothAvailable = bothAvailable,
                         isViewingCommented = isViewingCommented,
                         onToggleCodeView = { isViewingCommented = it }
@@ -259,131 +248,9 @@ fun DocumentationScreen(
 typealias UnitCallback = () -> Unit
 
 /**
- * Top summary card showing file type, analysis tags, and verification status.
- */
-@Composable
-private fun MetadataHeaderCard(
-    fileName: String,
-    hasOptimization: Boolean,
-    optimizationVerified: Boolean,
-    speedup: Double,
-    optimizationNote: String? = null
-) {
-    Surface(
-        color = CppThemeSurface,
-        border = BorderStroke(1.dp, CppThemeDivider),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Surface(
-                        color = CppThemePrimarySubtle,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                if (hasOptimization) Icons.Outlined.Speed else Icons.Outlined.Description,
-                                contentDescription = null,
-                                tint = CppThemePrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    Column {
-                        Text(
-                            text = if (hasOptimization) "Optimization Applied" else "Analysis Ready",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = CppThemeTextPrimary
-                        )
-                        Text(
-                            text = if (hasOptimization) "Recursion converted to loop with verification" else "AST verified comments and semantic breakdown",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = CppThemeTextSecondary
-                        )
-                    }
-                }
-
-                // Status chip
-                if (hasOptimization && optimizationVerified) {
-                    Surface(
-                        color = CppThemeSuccessSubtle,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
-                    ) {
-                        Text(
-                            text = if (speedup > 1.0) "⚡ ${speedup}x Faster" else "✓ Verified",
-                            color = CppThemeSuccess,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                } else if (hasOptimization) {
-                    Surface(
-                        color = CppThemePrimarySubtle,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, CppThemePrimary.copy(alpha = 0.25f))
-                    ) {
-                        Text(
-                            text = "Optimized",
-                            color = CppThemePrimary,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                } else {
-                    Surface(
-                        color = CppThemePrimarySubtle,
-                        shape = RoundedCornerShape(6.dp),
-                        border = BorderStroke(1.dp, CppThemePrimary.copy(alpha = 0.25f))
-                    ) {
-                        Text(
-                            text = "Documented",
-                            color = CppThemePrimary,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-            }
-
-            if (!optimizationNote.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(10.dp))
-                Surface(
-                    color = CppThemeSurfaceMuted,
-                    shape = RoundedCornerShape(6.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Optimization: $optimizationNote",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CppThemeTextSecondary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
  * Tab 0: Overview (Web-Style Stacked View)
  * Displays Explanation first at the top, then C++ Code block right underneath.
+ * Clean, light-themed developer card styling.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -393,6 +260,7 @@ private fun OverviewTabView(
     hasOptimization: Boolean,
     optimizationVerified: Boolean,
     speedup: Double,
+    optimizationNote: String?,
     bothAvailable: Boolean,
     isViewingCommented: Boolean,
     onToggleCodeView: (Boolean) -> Unit
@@ -446,7 +314,7 @@ private fun OverviewTabView(
             }
         }
 
-        // Section 2: Code block
+        // Section 2: Code block (Light-themed developer code card)
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -476,7 +344,7 @@ private fun OverviewTabView(
                             border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
                         ) {
                             Text(
-                                text = if (speedup > 1.0) "${speedup}x Faster" else "Verified",
+                                text = if (speedup > 1.0) "⚡ ${speedup}x Faster" else "✓ Verified",
                                 color = CppThemeSuccess,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -486,6 +354,23 @@ private fun OverviewTabView(
                     }
                 }
                 DocCopyButton(textToCopy = activeCode, label = "Copy Code")
+            }
+
+            if (!optimizationNote.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    color = CppThemeSurfaceMuted,
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, CppThemeDivider),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Optimization: $optimizationNote",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = CppThemeTextSecondary,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
+                }
             }
 
             if (bothAvailable) {
@@ -517,13 +402,14 @@ private fun OverviewTabView(
 
             Spacer(modifier = Modifier.height(10.dp))
             Surface(
-                color = CppThemeEditorDark,
+                color = CppThemeSurfaceMuted,
                 shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, CppThemeDivider),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = activeCode.ifBlank { "// No code available." },
-                    color = Color(0xFFE2E8F0),
+                    color = CppThemeTextPrimary,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.5.sp,
                     lineHeight = 20.sp,
@@ -592,7 +478,7 @@ private fun ExplanationTabView(explanation: String) {
 }
 
 /**
- * Tab 2: Code Only View
+ * Tab 2: Code Only View (Light Theme)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -601,6 +487,7 @@ private fun CodeOnlyTabView(
     hasOptimization: Boolean,
     optimizationVerified: Boolean,
     speedup: Double,
+    optimizationNote: String?,
     bothAvailable: Boolean,
     isViewingCommented: Boolean,
     onToggleCodeView: (Boolean) -> Unit
@@ -638,7 +525,7 @@ private fun CodeOnlyTabView(
                         border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
                     ) {
                         Text(
-                            text = if (speedup > 1.0) "${speedup}x Faster" else "Verified",
+                            text = if (speedup > 1.0) "⚡ ${speedup}x Faster" else "✓ Verified",
                             color = CppThemeSuccess,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
@@ -648,6 +535,23 @@ private fun CodeOnlyTabView(
                 }
             }
             DocCopyButton(textToCopy = code, label = "Copy Code")
+        }
+
+        if (!optimizationNote.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Surface(
+                color = CppThemeSurfaceMuted,
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, CppThemeDivider),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Optimization: $optimizationNote",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = CppThemeTextSecondary,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
         }
 
         if (bothAvailable) {
@@ -679,13 +583,14 @@ private fun CodeOnlyTabView(
 
         Spacer(modifier = Modifier.height(10.dp))
         Surface(
-            color = CppThemeEditorDark,
+            color = CppThemeSurfaceMuted,
             shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, CppThemeDivider),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = code.ifBlank { "// No code available." },
-                color = Color(0xFFE2E8F0),
+                color = CppThemeTextPrimary,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.5.sp,
                 lineHeight = 20.sp,
