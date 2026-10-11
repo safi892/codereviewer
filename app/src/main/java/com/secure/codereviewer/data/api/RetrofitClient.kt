@@ -1,6 +1,7 @@
 package com.secure.codereviewer.data.api
 
 import com.secure.codereviewer.BuildConfig
+import com.secure.codereviewer.data.local.AuthStorage
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -22,7 +23,7 @@ object RetrofitClient {
     private val authInterceptor = object : Interceptor {
         override fun intercept(chain: Interceptor.Chain): Response {
             val originalRequest = chain.request()
-            val authHeader = AuthManager.getAuthHeader()
+            val authHeader = AuthStorage.getAuthHeader()
             
             return if (authHeader != null) {
                 val authenticatedRequest = originalRequest.newBuilder()

@@ -1,17 +1,13 @@
-package com.secure.codereviewer.data.api
+package com.secure.codereviewer.data.local
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.secure.codereviewer.data.api.HistoryEntry
 import org.json.JSONArray
 import org.json.JSONObject
 
-object AuthManager {
+object HistoryStorage {
     private const val PREF_NAME = "auth_prefs"
-    private const val KEY_TOKEN = "token"
-    private const val KEY_USER_ID = "user_id"
-    private const val KEY_USER_NAME = "user_name"
-    private const val KEY_USER_EMAIL = "user_email"
-    private const val KEY_IS_LOGGED_IN = "is_logged_in"
     private const val KEY_HISTORY = "history_cache"
     private const val KEY_HISTORY_TOTAL = "history_total"
     private const val KEY_HISTORY_TIMESTAMP = "history_timestamp"
@@ -68,53 +64,12 @@ object AuthManager {
         }
     }
 
-    fun saveAuthData(token: String, user: AuthUser) {
+    fun clearHistoryCache() {
         prefs.edit().apply {
-            putString(KEY_TOKEN, token)
-            putInt(KEY_USER_ID, user.id)
-            putString(KEY_USER_NAME, user.name)
-            putString(KEY_USER_EMAIL, user.email)
-            putBoolean(KEY_IS_LOGGED_IN, true)
+            remove(KEY_HISTORY)
+            remove(KEY_HISTORY_TOTAL)
+            remove(KEY_HISTORY_TIMESTAMP)
             apply()
         }
-    }
-
-    fun getToken(): String? {
-        return prefs.getString(KEY_TOKEN, null)
-    }
-
-    fun getUserId(): Int {
-        return prefs.getInt(KEY_USER_ID, -1)
-    }
-
-    fun getUserName(): String? {
-        return prefs.getString(KEY_USER_NAME, null)
-    }
-
-    fun getUserEmail(): String? {
-        return prefs.getString(KEY_USER_EMAIL, null)
-    }
-
-    fun isLoggedIn(): Boolean {
-        return prefs.getBoolean(KEY_IS_LOGGED_IN, false)
-    }
-
-    fun logout() {
-        prefs.edit().apply {
-            clear()
-            apply()
-        }
-    }
-
-    fun getAuthHeader(): String? {
-        val token = getToken()
-        return if (token != null) "Bearer $token" else null
     }
 }
-
-
-
-
-
-
-

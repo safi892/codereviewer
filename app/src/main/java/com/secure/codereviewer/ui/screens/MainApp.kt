@@ -13,10 +13,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.secure.codereviewer.data.api.AuthManager
+import com.secure.codereviewer.data.local.AuthStorage
 import com.secure.codereviewer.ui.components.AppBottomNavigation
 import com.secure.codereviewer.ui.screens.codeinput.CodeInputScreen
 import com.secure.codereviewer.ui.screens.dashboard.DashboardScreen
+import com.secure.codereviewer.ui.screens.documentation.DocumentationScreen
 import com.secure.codereviewer.ui.screens.editor.EditorScreen
 import com.secure.codereviewer.ui.screens.history.HistoryScreen
 import com.secure.codereviewer.ui.screens.history.HistoryUiItem
@@ -36,6 +37,7 @@ enum class Screen {
     History,
     CodeInput,
     Editor,
+    Documentation,
     Settings,
     PrivacyPolicy
 }
@@ -47,11 +49,19 @@ fun CodeReviewerApp() {
     var pendingEditorFileName by remember { mutableStateOf<String?>(null) }
     var pendingEditorContentKey by remember { mutableIntStateOf(0) }
 
+    var pendingDocExplanation by remember { mutableStateOf("") }
+    var pendingDocCommentedCode by remember { mutableStateOf("") }
+    var pendingDocOptimizedCode by remember { mutableStateOf<String?>(null) }
+    var pendingDocOptVerified by remember { mutableStateOf(false) }
+    var pendingDocSpeedup by remember { mutableDoubleStateOf(0.0) }
+    var pendingDocOptNote by remember { mutableStateOf<String?>(null) }
+    var pendingDocFileName by remember { mutableStateOf("analysis.cpp") }
+
     LaunchedEffect(currentScreen) {
         if (currentScreen == Screen.Splash) {
             delay(1200)
             // Check if user is already logged in
-            currentScreen = if (AuthManager.isLoggedIn()) Screen.Dashboard else Screen.Welcome
+            currentScreen = if (AuthStorage.isLoggedIn()) Screen.Dashboard else Screen.Welcome
         }
     }
 
@@ -95,10 +105,13 @@ fun CodeReviewerApp() {
                 )
                 Screen.History -> HistoryScreen(
                     onItemClick = { historyItem ->
-                        pendingEditorContent = buildHistoryContent(historyItem)
-                        pendingEditorFileName = "analysis-${historyItem.id}.cpp"
-                        pendingEditorContentKey += 1
-                        currentScreen = Screen.Editor
+                        pendingDocExplanation = historyItem.explanation
+                        pendingDocCommentedCode = historyItem.commentedCode
+                        pendingDocOptimizedCode = null
+                        pendingDocOptVerified = false
+                        pendingDocSpeedup = 0.0
+                        pendingDocFileName = historyItem.title
+                        currentScreen = Screen.Documentation
                     }
                 )
                 Screen.CodeInput -> CodeInputScreen(
@@ -125,11 +138,37 @@ fun CodeReviewerApp() {
                     onInitialContentConsumed = {
                         pendingEditorContent = null
                         pendingEditorFileName = null
+                    },
+                    onOpenDocumentation = { explanation, commentedCode, optCode, optVerified, speedup, optNote, fileName ->
+                        pendingDocExplanation = explanation
+                        pendingDocCommentedCode = commentedCode
+                        pendingDocOptimizedCode = optCode
+                        pendingDocOptVerified = optVerified
+                        pendingDocSpeedup = speedup
+                        pendingDocOptNote = optNote
+                        pendingDocFileName = fileName
+                        currentScreen = Screen.Documentation
+                    }
+                )
+                Screen.Documentation -> DocumentationScreen(
+                    explanation = pendingDocExplanation,
+                    commentedCode = pendingDocCommentedCode,
+                    optimizedCode = pendingDocOptimizedCode,
+                    optimizationVerified = pendingDocOptVerified,
+                    speedup = speedupCalc(pendingDocSpeedup),
+                    optimizationNote = pendingDocOptNote,
+                    fileName = pendingDocFileName,
+                    onBack = { currentScreen = Screen.Editor },
+                    onOpenInEditor = { codeToLoad ->
+                        pendingEditorContent = codeToLoad
+                        pendingEditorFileName = pendingDocFileName
+                        pendingEditorContentKey += 1
+                        currentScreen = Screen.Editor
                     }
                 )
                 Screen.Settings -> SettingsScreen(
                     onLogout = { 
-                        AuthManager.logout()
+                        AuthStorage.logout()
                         currentScreen = Screen.Welcome 
                     },
                     onOpenPrivacyPolicy = { currentScreen = Screen.PrivacyPolicy }
@@ -141,6 +180,8 @@ fun CodeReviewerApp() {
         }
     }
 }
+
+private fun speedupCalc(speedup: Double): Double = speedup
 
 @Composable
 private fun SplashScreen() {

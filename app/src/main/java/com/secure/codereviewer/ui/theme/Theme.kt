@@ -17,10 +17,11 @@ import androidx.core.view.WindowCompat
 
 private val LightColorScheme = lightColorScheme(
     primary = CppThemePrimary,
-    secondary = CppThemePrimaryVariant,
+    secondary = CppThemePrimaryHover,
     tertiary = CppThemeSecondary,
     background = CppThemeBackground,
     surface = CppThemeSurface,
+    surfaceVariant = CppThemeSurfaceMuted,
     onPrimary = CppThemeSurface,
     onSecondary = CppThemeSurface,
     onSurface = CppThemeTextPrimary,
@@ -30,14 +31,11 @@ private val LightColorScheme = lightColorScheme(
     error = CppThemeError
 )
 
-// We'll keep dark theme mapping but use the same "Soft" principles or just mirror light mode if requested.
-// For now, let's keep it strictly light mode as per request.
-private val DarkColorScheme = LightColorScheme 
+private val DarkColorScheme = LightColorScheme
 
 @Composable
 fun CodeReviewerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
@@ -48,7 +46,7 @@ fun CodeReviewerTheme(
         }
         else -> LightColorScheme
     }
-    
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {

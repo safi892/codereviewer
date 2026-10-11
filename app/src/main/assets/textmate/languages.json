@@ -1,7 +1,9 @@
-[
-  {
-    "name": "cpp",
-    "scopeName": "source.cpp",
-    "path": "cpp/cpp.tmLanguage.json"
-  }
-]
+{
+  "languages": [
+    {
+      "name": "cpp",
+      "scopeName": "source.cpp",
+      "path": "textmate/cpp/cpp.tmLanguage.json"
+    }
+  ]
+}

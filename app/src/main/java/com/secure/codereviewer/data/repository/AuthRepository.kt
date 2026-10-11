@@ -2,6 +2,7 @@ package com.secure.codereviewer.data.repository
 
 import com.google.gson.Gson
 import com.secure.codereviewer.data.api.*
+import com.secure.codereviewer.data.local.AuthStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Response
@@ -26,7 +27,7 @@ class AuthRepository {
             val body = response.body()
             val authData = body?.authData()
             if (response.isSuccessful && body?.isSuccessfulAuth() == true && authData != null) {
-                AuthManager.saveAuthData(authData.token, authData.user)
+                AuthStorage.saveAuthData(authData.token, authData.user)
                 Result.success(authData)
             } else {
                 Result.failure(Exception(response.errorMessage(body?.message)))
@@ -43,7 +44,7 @@ class AuthRepository {
             val body = response.body()
             val authData = body?.authData()
             if (response.isSuccessful && body?.isSuccessfulAuth() == true && authData != null) {
-                AuthManager.saveAuthData(authData.token, authData.user)
+                AuthStorage.saveAuthData(authData.token, authData.user)
                 Result.success(authData)
             } else {
                 Result.failure(Exception(response.errorMessage(body?.message)))
@@ -55,7 +56,7 @@ class AuthRepository {
 
     suspend fun getCurrentUser(): Result<AuthUser> = withContext(Dispatchers.IO) {
         try {
-            if (AuthManager.getAuthHeader() == null) {
+            if (AuthStorage.getAuthHeader() == null) {
                 return@withContext Result.failure(Exception("No token found"))
             }
 
@@ -74,23 +75,23 @@ class AuthRepository {
 
     suspend fun logout(): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            if (AuthManager.getAuthHeader() != null) {
+            if (AuthStorage.getAuthHeader() != null) {
                 RetrofitClient.api.logout()
             }
-            AuthManager.logout()
+            AuthStorage.logout()
             Result.success(Unit)
         } catch (e: Exception) {
-            AuthManager.logout()
+            AuthStorage.logout()
             Result.failure(e)
         }
     }
 
-    fun isLoggedIn(): Boolean = AuthManager.isLoggedIn()
+    fun isLoggedIn(): Boolean = AuthStorage.isLoggedIn()
 
     fun getCurrentUserInfo(): AuthUser? {
-        val id = AuthManager.getUserId()
-        val name = AuthManager.getUserName()
-        val email = AuthManager.getUserEmail()
+        val id = AuthStorage.getUserId()
+        val name = AuthStorage.getUserName()
+        val email = AuthStorage.getUserEmail()
         return if (id > 0 && name != null && email != null) {
             AuthUser(id = id, name = name, email = email)
         } else {

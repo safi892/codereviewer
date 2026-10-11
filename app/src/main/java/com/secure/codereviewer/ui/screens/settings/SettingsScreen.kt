@@ -17,7 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.secure.codereviewer.data.api.AuthManager
+import com.secure.codereviewer.data.local.AuthStorage
 import com.secure.codereviewer.data.repository.AuthRepository
 import kotlinx.coroutines.launch
 
@@ -157,8 +157,8 @@ fun SettingsScreen(
 
 @Composable
 private fun SettingsProfileHeader() {
-    val userName = AuthManager.getUserName() ?: "User"
-    val userEmail = AuthManager.getUserEmail() ?: "user@example.com"
+    val userName = AuthStorage.getUserName() ?: "User"
+    val userEmail = AuthStorage.getUserEmail() ?: "user@example.com"
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
