@@ -58,6 +58,7 @@ fun CodeReviewerApp() {
     var pendingDocSpeedup by remember { mutableDoubleStateOf(0.0) }
     var pendingDocOptNote by remember { mutableStateOf<String?>(null) }
     var pendingDocFileName by remember { mutableStateOf("analysis.cpp") }
+    var docOriginScreen by remember { mutableStateOf(Screen.Editor) }
 
     LaunchedEffect(currentScreen) {
         if (currentScreen == Screen.Splash) {
@@ -109,11 +110,13 @@ fun CodeReviewerApp() {
                 Screen.History -> HistoryScreen(
                     onItemClick = { historyItem ->
                         pendingDocExplanation = historyItem.explanation
-                        pendingDocCommentedCode = historyItem.commentedCode
+                        pendingDocCommentedCode = historyItem.commentedCode.ifBlank { historyItem.inputCode }
                         pendingDocOptimizedCode = null
                         pendingDocOptVerified = false
                         pendingDocSpeedup = 0.0
+                        pendingDocOptNote = null
                         pendingDocFileName = historyItem.title
+                        docOriginScreen = Screen.History
                         currentScreen = Screen.Documentation
                     }
                 )
@@ -150,6 +153,7 @@ fun CodeReviewerApp() {
                         pendingDocSpeedup = speedup
                         pendingDocOptNote = optNote
                         pendingDocFileName = fileName
+                        docOriginScreen = Screen.Editor
                         currentScreen = Screen.Documentation
                     }
                 )
@@ -161,7 +165,7 @@ fun CodeReviewerApp() {
                     speedup = speedupCalc(pendingDocSpeedup),
                     optimizationNote = pendingDocOptNote,
                     fileName = pendingDocFileName,
-                    onBack = { currentScreen = Screen.Editor },
+                    onBack = { currentScreen = docOriginScreen },
                     onOpenInEditor = { codeToLoad ->
                         pendingEditorContent = codeToLoad
                         pendingEditorFileName = pendingDocFileName

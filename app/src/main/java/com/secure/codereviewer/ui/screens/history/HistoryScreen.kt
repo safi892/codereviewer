@@ -51,7 +51,6 @@ fun HistoryScreen(
     val viewModel: HistoryViewModel = viewModel()
     val listState = rememberLazyListState()
     var query by remember { mutableStateOf("") }
-    var selectedItemForDetail by remember { mutableStateOf<HistoryUiItem?>(null) }
 
     // Recomputed only when the query or the list changes, not on every recomposition.
     val filteredItems by remember {
@@ -232,7 +231,7 @@ fun HistoryScreen(
                                 date = "$sourceLabel · $relativeTime",
                                 status = "Verified",
                                 statusColor = CppThemeSuccess,
-                                onClick = { selectedItemForDetail = historyItem }
+                                onClick = { onItemClick(historyItem) }
                             )
 
                             if (index < filteredItems.lastIndex) {
@@ -258,26 +257,6 @@ fun HistoryScreen(
                     }
                 }
             }
-        }
-    }
-
-    // Modal Inspection Sheet
-    if (selectedItemForDetail != null) {
-        ModalBottomSheet(
-            onDismissRequest = { selectedItemForDetail = null },
-            containerColor = CppThemeSurface,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
-            dragHandle = { BottomSheetDefaults.DragHandle(color = CppThemeDivider) }
-        ) {
-            HistoryInspectionSheet(
-                item = selectedItemForDetail!!,
-                onOpenInEditor = {
-                    val item = selectedItemForDetail!!
-                    selectedItemForDetail = null
-                    onItemClick(item)
-                },
-                onClose = { selectedItemForDetail = null }
-            )
         }
     }
 }
