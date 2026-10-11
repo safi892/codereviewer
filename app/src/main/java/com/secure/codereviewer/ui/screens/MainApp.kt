@@ -27,6 +27,8 @@ import com.secure.codereviewer.ui.screens.welcome.LoginScreen
 import com.secure.codereviewer.ui.screens.welcome.SignupScreen
 import com.secure.codereviewer.ui.screens.welcome.WelcomeScreen
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 enum class Screen {
     Splash,
@@ -60,8 +62,9 @@ fun CodeReviewerApp() {
     LaunchedEffect(currentScreen) {
         if (currentScreen == Screen.Splash) {
             delay(1200)
-            // Check if user is already logged in
-            currentScreen = if (AuthStorage.isLoggedIn()) Screen.Dashboard else Screen.Welcome
+            // First SharedPreferences read blocks until the file is loaded from disk: do it on IO.
+            val loggedIn = withContext(Dispatchers.IO) { AuthStorage.isLoggedIn() }
+            currentScreen = if (loggedIn) Screen.Dashboard else Screen.Welcome
         }
     }
 

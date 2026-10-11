@@ -1,75 +1,76 @@
 package com.secure.codereviewer.data.local
 
 import android.content.Context
-import android.content.SharedPreferences
+import com.google.gson.Gson
 import com.secure.codereviewer.data.api.HistoryEntry
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 
+/**
+ * Offline cache for the first page of history.
+ *
+ * Previously this was a large JSON string stored inside the *same* SharedPreferences
+ * file as the auth token ("auth_prefs"). That meant:
+ *  - every auth read on the main thread waited for the whole history blob to load,
+ *  - every apply() rewrote the whole file, and Android waits for pending apply()
+ *    writes on the main thread in onPause/onStop (jank / ANR risk),
+ *  - JSON parsing ran on the main thread.
+ *
+ * Now it's a plain file in cacheDir, and every access is a suspend function on IO.
+ */
 object HistoryStorage {
-    private const val PREF_NAME = "auth_prefs"
-    private const val KEY_HISTORY = "history_cache"
-    private const val KEY_HISTORY_TOTAL = "history_total"
-    private const val KEY_HISTORY_TIMESTAMP = "history_timestamp"
+    private const val FILE_NAME = "history_cache.json"
+    private const val LEGACY_PREF_NAME = "auth_prefs"
+    private val LEGACY_KEYS = listOf("history_cache", "history_total", "history_timestamp")
 
-    private lateinit var prefs: SharedPreferences
+    private val gson = Gson()
+    private lateinit var appContext: Context
+
+    private data class CachePayload(
+        val items: List<HistoryEntry>,
+        val total: Int,
+        val timestamp: Long
+    )
 
     fun init(context: Context) {
-        prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        appContext = context.applicationContext
     }
 
-    fun saveHistoryCache(history: List<HistoryEntry>, total: Int) {
-        val jsonArray = JSONArray()
-        history.forEach { entry ->
-            val json = JSONObject().apply {
-                put("id", entry.id)
-                put("input_code", entry.input_code)
-                put("commented_code", entry.commented_code)
-                put("explanation", entry.explanation)
-                put("source", entry.source)
-                put("created_at", entry.created_at)
-            }
-            jsonArray.put(json)
+    private val cacheFile: File get() = File(appContext.cacheDir, FILE_NAME)
+
+    suspend fun saveHistoryCache(history: List<HistoryEntry>, total: Int) = withContext(Dispatchers.IO) {
+        runCatching {
+            val json = gson.toJson(CachePayload(history, total, System.currentTimeMillis()))
+            // Write to a temp file and rename so a crash never leaves a half-written cache.
+            val tmp = File(appContext.cacheDir, "$FILE_NAME.tmp")
+            tmp.writeText(json)
+            tmp.renameTo(cacheFile)
         }
-        prefs.edit().apply {
-            putString(KEY_HISTORY, jsonArray.toString())
-            putInt(KEY_HISTORY_TOTAL, total)
-            putLong(KEY_HISTORY_TIMESTAMP, System.currentTimeMillis())
-            apply()
-        }
+        removeLegacyCache()
     }
 
-    fun getHistoryCache(): Pair<List<HistoryEntry>, Int>? {
-        val jsonStr = prefs.getString(KEY_HISTORY, null) ?: return null
-        val total = prefs.getInt(KEY_HISTORY_TOTAL, 0)
-        return try {
-            val jsonArray = JSONArray(jsonStr)
-            val list = mutableListOf<HistoryEntry>()
-            for (i in 0 until jsonArray.length()) {
-                val json = jsonArray.getJSONObject(i)
-                list.add(
-                    HistoryEntry(
-                        id = json.getInt("id"),
-                        input_code = json.getString("input_code"),
-                        commented_code = json.getString("commented_code"),
-                        explanation = json.getString("explanation"),
-                        source = json.optString("source").takeIf { it.isNotEmpty() },
-                        created_at = json.getString("created_at")
-                    )
-                )
-            }
-            Pair(list, total)
-        } catch (e: Exception) {
-            null
-        }
+    suspend fun getHistoryCache(): Pair<List<HistoryEntry>, Int>? = withContext(Dispatchers.IO) {
+        runCatching {
+            val file = cacheFile
+            if (!file.exists()) return@runCatching null
+            val payload = gson.fromJson(file.readText(), CachePayload::class.java)
+            // Gson can produce null for non-null Kotlin fields on malformed data.
+            @Suppress("SENSELESS_COMPARISON")
+            if (payload?.items == null) null else payload.items to payload.total
+        }.getOrNull()
     }
 
-    fun clearHistoryCache() {
-        prefs.edit().apply {
-            remove(KEY_HISTORY)
-            remove(KEY_HISTORY_TOTAL)
-            remove(KEY_HISTORY_TIMESTAMP)
-            apply()
+    suspend fun clearHistoryCache() = withContext(Dispatchers.IO) {
+        runCatching { cacheFile.delete() }
+        removeLegacyCache()
+    }
+
+    /** One-time cleanup of the old blob that lived in auth_prefs. */
+    private fun removeLegacyCache() {
+        val prefs = appContext.getSharedPreferences(LEGACY_PREF_NAME, Context.MODE_PRIVATE)
+        if (LEGACY_KEYS.any(prefs::contains)) {
+            prefs.edit().apply { LEGACY_KEYS.forEach(::remove) }.apply()
         }
     }
 }

@@ -3,6 +3,7 @@ package com.secure.codereviewer.data.repository
 import com.google.gson.Gson
 import com.secure.codereviewer.data.api.*
 import com.secure.codereviewer.data.local.AuthStorage
+import com.secure.codereviewer.data.local.HistoryStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import retrofit2.Response
@@ -79,9 +80,11 @@ class AuthRepository {
                 RetrofitClient.api.logout()
             }
             AuthStorage.logout()
+            HistoryStorage.clearHistoryCache()
             Result.success(Unit)
         } catch (e: Exception) {
             AuthStorage.logout()
+            HistoryStorage.clearHistoryCache()
             Result.failure(e)
         }
     }

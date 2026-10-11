@@ -7,7 +7,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.secure.codereviewer.data.api.HistoryEntry
 import com.secure.codereviewer.data.repository.CodeRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.OffsetDateTime
 
 
@@ -35,13 +39,15 @@ class HistoryViewModel : ViewModel() {
 
     private var offset = 0
     private val limit = 20
+    private var fetchJob: Job? = null
 
     fun loadInitial() {
         if (items.isNotEmpty() || isLoading) return
+        isLoading = true
         viewModelScope.launch {
-            val localResponse = repository.getLocalHistory()
-            if (localResponse != null) {
-                items = localResponse.items.map(::toUiItem)
+            // Show cache instantly (file read + parse happen on IO / Default).
+            repository.getLocalHistory()?.let { cached ->
+                items = cached.items.toUiItems()
                 hasMore = false
             }
             fetch(reset = true)
@@ -59,6 +65,7 @@ class HistoryViewModel : ViewModel() {
     }
 
     private fun fetch(reset: Boolean) {
+        if (reset) fetchJob?.cancel()
         isLoading = true
         errorMessage = null
         if (reset) {
@@ -66,18 +73,22 @@ class HistoryViewModel : ViewModel() {
             hasMore = true
         }
 
-        viewModelScope.launch {
+        fetchJob = viewModelScope.launch {
             try {
                 val response = repository.getHistory(limit = limit, offset = offset)
-                val newItems = response.items.map(::toUiItem)
-                items = if (reset) newItems else items + newItems
-                offset += newItems.size
-                hasMore = items.size < response.total
+                val newItems = response.items.toUiItems()
+                val merged = if (reset) newItems else items + newItems
+                // Server-side inserts can shift pages; keep ids unique (required by LazyColumn keys).
+                items = merged.distinctBy { it.id }
+                offset += response.items.size
+                hasMore = response.items.isNotEmpty() && offset < response.total
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 if (items.isEmpty()) {
                     val localResponse = repository.getLocalHistory()
                     if (localResponse != null) {
-                        items = localResponse.items.map(::toUiItem)
+                        items = localResponse.items.toUiItems()
                         hasMore = false
                         errorMessage = "Showing cached history (offline)"
                     } else {
@@ -91,6 +102,10 @@ class HistoryViewModel : ViewModel() {
             }
         }
     }
+
+    /** Regex + date parsing for each entry is CPU work: keep it off the main thread. */
+    private suspend fun List<HistoryEntry>.toUiItems(): List<HistoryUiItem> =
+        withContext(Dispatchers.Default) { map(::toUiItem) }
 
     private fun toUiItem(entry: HistoryEntry): HistoryUiItem {
         return HistoryUiItem(
@@ -109,8 +124,7 @@ class HistoryViewModel : ViewModel() {
             .lineSequence()
             .firstOrNull { it.isNotBlank() }
             ?.trim()
-            ?.replace("\t", " ")
-            ?.replace(Regex("\\s+"), " ")
+            ?.replace(WHITESPACE, " ")
 
         if (firstLine.isNullOrBlank()) {
             return "Analysis #${entry.id}"
@@ -129,5 +143,10 @@ class HistoryViewModel : ViewModel() {
         } catch (_: Exception) {
             System.currentTimeMillis()
         }
+    }
+
+    private companion object {
+        // Compiled once instead of once per history item.
+        val WHITESPACE = Regex("\\s+")
     }
 }

@@ -15,8 +15,10 @@ object RetrofitClient {
     private const val CONNECT_TIMEOUT_SECONDS = 30L
     private const val MODEL_TIMEOUT_SECONDS = 300L
 
+    // BODY logging formats and prints every (large) analysis response and the login
+    // request/response (password + token). Debug only.
     private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
         redactHeader("Authorization")
     }
 

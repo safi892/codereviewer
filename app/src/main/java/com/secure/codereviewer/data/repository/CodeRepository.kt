@@ -115,9 +115,9 @@ class CodeRepository {
     }
 
     /**
-     * Get offline cached history.
+     * Get offline cached history (file read + JSON parse on Dispatchers.IO).
      */
-    fun getLocalHistory(): HistoryListResponse? {
+    suspend fun getLocalHistory(): HistoryListResponse? {
         val cached = HistoryStorage.getHistoryCache() ?: return null
         return HistoryListResponse(
             items = cached.first,

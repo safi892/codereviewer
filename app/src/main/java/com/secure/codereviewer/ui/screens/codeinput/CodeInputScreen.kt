@@ -1,5 +1,6 @@
 package com.secure.codereviewer.ui.screens.codeinput
 
+import android.content.Intent
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,6 +23,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.secure.codereviewer.ui.components.UploadCard
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +35,7 @@ fun CodeInputScreen(
     onOpenEditor: (code: String, fileName: String?) -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var code by remember { mutableStateOf("") }
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     var fileError by remember { mutableStateOf<String?>(null) }
@@ -39,35 +44,38 @@ fun CodeInputScreen(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        val resolver = context.contentResolver
 
-        try {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: SecurityException) {
-            // Some providers do not grant persistable access; immediate read still works.
-        }
-
-        try {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                code = input.bufferedReader().readText()
-                selectedFileName = context.contentResolver.query(
-                    uri,
-                    arrayOf(OpenableColumns.DISPLAY_NAME),
-                    null,
-                    null,
-                    null
-                )?.use { cursor ->
-                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
-                } ?: uri.lastPathSegment?.substringAfterLast('/')
-                fileError = null
-            } ?: run {
-                fileError = "Could not open selected file."
+        // Reading a document provider (can be cloud-backed / slow) must not block the UI thread.
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    try {
+                        resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    } catch (_: SecurityException) {
+                        // Some providers do not grant persistable access; immediate read still works.
+                    }
+                    val text = resolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                        ?: return@runCatching null
+                    val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { cursor ->
+                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+                        } ?: uri.lastPathSegment?.substringAfterLast('/')
+                    text to name
+                }
             }
-        } catch (e: Exception) {
-            fileError = e.message ?: "Could not read selected file."
+            result
+                .onSuccess { loaded ->
+                    if (loaded == null) {
+                        fileError = "Could not open selected file."
+                    } else {
+                        code = loaded.first
+                        selectedFileName = loaded.second
+                        fileError = null
+                    }
+                }
+                .onFailure { e -> fileError = e.message ?: "Could not read selected file." }
         }
     }
 

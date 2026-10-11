@@ -8,6 +8,7 @@ import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
 import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
+import io.github.rosemoe.sora.langs.textmate.registry.model.GrammarDefinition
 import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel
 import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver
 import io.github.rosemoe.sora.widget.CodeEditor
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.eclipse.tm4e.core.registry.IGrammarSource
 import org.eclipse.tm4e.core.registry.IThemeSource
 
 /**
@@ -52,11 +54,25 @@ object EditorSetup {
                 FileProviderRegistry.getInstance()
                     .addFileProvider(AssetsFileResolver(appContext.assets))
 
-                // languages.json already registers source.cpp -> cpp.tmLanguage.json,
-                // so the grammar is parsed exactly once.
-                runCatching {
-                    GrammarRegistry.getInstance().loadGrammars("textmate/languages.json")
-                }.onFailure { Log.e(TAG, "Failed to load grammars", it) }
+                val grammarRegistry = GrammarRegistry.getInstance()
+                runCatching { grammarRegistry.loadGrammars("textmate/languages.json") }
+                    .onFailure { Log.e(TAG, "Failed to load languages.json", it) }
+
+                // Only parse the 550 KB grammar manually if languages.json didn't register it.
+                // (Previously it was always parsed twice on the main thread.)
+                if (runCatching { grammarRegistry.findGrammar(CPP_SCOPE) }.getOrNull() == null) {
+                    runCatching {
+                        appContext.assets.open("textmate/cpp/cpp.tmLanguage.json").use { stream ->
+                            val source = IGrammarSource.fromInputStream(stream, "cpp.tmLanguage.json", null)
+                            grammarRegistry.loadGrammar(object : GrammarDefinition {
+                                override fun getName() = CPP_SCOPE
+                                override fun getScopeName() = CPP_SCOPE
+                                override fun getGrammar() = source
+                                override fun getLanguageConfiguration(): String? = null
+                            })
+                        }
+                    }.onFailure { Log.e(TAG, "Failed to load C++ grammar", it) }
+                }
 
                 runCatching {
                     appContext.assets.open("textmate/themes/$THEME_NAME.json").use { stream ->

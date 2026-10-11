@@ -14,7 +14,6 @@ import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -33,15 +32,15 @@ import com.secure.codereviewer.ui.theme.*
 
 /**
  * DocumentationScreen:
- * A dedicated, professional screen that displays the full analysis results:
- * - Clean overview header with verified badges.
+ * A dedicated, professional screen that displays the full analysis and optimization results:
+ * - Clean overview header with verified badges and speedup metrics.
+ * - Unified stacked layout (like Web): Explanation first at top, followed by C++ Code.
  * - Interactive Segmented Tabs:
- *     1. Overview (Explanation + Key points)
- *     2. Commented Code (Documented C++ source)
- *     3. Side-by-Side (Compare explanation with code)
- *     4. Optimized Loop (If loop optimization was generated)
+ *     1. Overview (Explanation + Code stacked together, default web-style view)
+ *     2. Explanation (Focused deep-dive)
+ *     3. Code (Source code view with toggle between optimized and commented)
  * - Quick copy actions for individual sections or full report.
- * - One-tap action to return to the editor.
+ * - One-tap action to return to the editor with the chosen code loaded.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,21 +52,28 @@ fun DocumentationScreen(
     speedup: Double = 0.0,
     optimizationNote: String? = null,
     fileName: String = "analysis.cpp",
-    onBack: () -> Unit,
+    onBack: UnitCallback,
     onOpenInEditor: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
 
     val hasOptimization = !optimizedCode.isNullOrBlank()
-    val tabs = remember(hasOptimization) {
-        val list = mutableListOf("Explanation", "Commented Code", "Split View")
-        if (hasOptimization) {
-            list.add("Optimized Loop")
+    val hasCommentedCode = commentedCode.isNotBlank()
+    val bothAvailable = hasOptimization && hasCommentedCode && (optimizedCode != commentedCode)
+
+    // By default, if optimization is present, show the optimized code; otherwise the commented code
+    var isViewingCommented by remember { mutableStateOf(false) }
+
+    val activeCode = remember(isViewingCommented, optimizedCode, commentedCode) {
+        if (hasOptimization && (!isViewingCommented || !hasCommentedCode)) {
+            optimizedCode ?: commentedCode
+        } else {
+            commentedCode.ifBlank { optimizedCode ?: "" }
         }
-        list
     }
 
+    val tabs = remember { listOf("Overview", "Explanation", "Code") }
     var selectedTabIndex by remember { mutableIntStateOf(0) }
 
     Scaffold(
@@ -110,7 +116,7 @@ fun DocumentationScreen(
                             appendLine(explanation.trim())
                             appendLine("*/")
                             appendLine()
-                            appendLine(commentedCode.trim())
+                            appendLine(activeCode.trim())
                         }
                         clipboardManager.setText(AnnotatedString(fullReport))
                         Toast.makeText(context, "Full report copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -123,7 +129,7 @@ fun DocumentationScreen(
                     }
 
                     if (onOpenInEditor != null) {
-                        IconButton(onClick = { onOpenInEditor(commentedCode) }) {
+                        IconButton(onClick = { onOpenInEditor(activeCode) }) {
                             Icon(
                                 Icons.Outlined.Edit,
                                 contentDescription = "Edit in IDE",
@@ -156,12 +162,12 @@ fun DocumentationScreen(
 
             // Primary Navigation Tabs
             TabRow(
-                selectedTabIndex = selectedTabIndex.coerceAtMost(tabs.size - 1),
+                selectedTabIndex = selectedTabIndex,
                 containerColor = CppThemeSurface,
                 contentColor = CppThemePrimary,
                 indicator = { tabPositions ->
                     TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex.coerceAtMost(tabs.size - 1)]),
+                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
                         color = CppThemePrimary,
                         height = 2.5.dp
                     )
@@ -194,20 +200,30 @@ fun DocumentationScreen(
                     .padding(horizontal = 20.dp)
             ) {
                 when (selectedTabIndex) {
-                    0 -> ExplanationTabView(explanation = explanation)
-                    1 -> CommentedCodeTabView(code = commentedCode)
-                    2 -> SplitTabView(explanation = explanation, code = commentedCode)
-                    3 -> if (hasOptimization) {
-                        OptimizedLoopTabView(
-                            code = optimizedCode ?: "",
-                            verified = optimizationVerified,
-                            speedup = speedup
-                        )
-                    }
+                    0 -> OverviewTabView(
+                        explanation = explanation,
+                        activeCode = activeCode,
+                        hasOptimization = hasOptimization,
+                        optimizationVerified = optimizationVerified,
+                        speedup = speedup,
+                        bothAvailable = bothAvailable,
+                        isViewingCommented = isViewingCommented,
+                        onToggleCodeView = { isViewingCommented = it }
+                    )
+                    1 -> ExplanationTabView(explanation = explanation)
+                    2 -> CodeOnlyTabView(
+                        code = activeCode,
+                        hasOptimization = hasOptimization,
+                        optimizationVerified = optimizationVerified,
+                        speedup = speedup,
+                        bothAvailable = bothAvailable,
+                        isViewingCommented = isViewingCommented,
+                        onToggleCodeView = { isViewingCommented = it }
+                    )
                 }
             }
 
-            // Bottom action: Open in Editor
+            // Bottom sticky action: Open in Editor
             if (onOpenInEditor != null) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -215,11 +231,11 @@ fun DocumentationScreen(
                     border = BorderStroke(1.dp, CppThemeDivider)
                 ) {
                     Button(
-                        onClick = { onOpenInEditor(commentedCode) },
+                        onClick = { onOpenInEditor(activeCode) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 20.dp, vertical = 12.dp)
-                            .height(48.dp),
+                            .height(50.dp),
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = CppThemePrimary,
@@ -239,6 +255,8 @@ fun DocumentationScreen(
         }
     }
 }
+
+typealias UnitCallback = () -> Unit
 
 /**
  * Top summary card showing file type, analysis tags, and verification status.
@@ -276,7 +294,7 @@ private fun MetadataHeaderCard(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                Icons.Outlined.Description,
+                                if (hasOptimization) Icons.Outlined.Speed else Icons.Outlined.Description,
                                 contentDescription = null,
                                 tint = CppThemePrimary,
                                 modifier = Modifier.size(18.dp)
@@ -285,13 +303,13 @@ private fun MetadataHeaderCard(
                     }
                     Column {
                         Text(
-                            text = "Analysis Ready",
+                            text = if (hasOptimization) "Optimization Applied" else "Analysis Ready",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = CppThemeTextPrimary
                         )
                         Text(
-                            text = "AST verified comments and semantic breakdown",
+                            text = if (hasOptimization) "Recursion converted to loop with verification" else "AST verified comments and semantic breakdown",
                             style = MaterialTheme.typography.labelSmall,
                             color = CppThemeTextSecondary
                         )
@@ -306,10 +324,24 @@ private fun MetadataHeaderCard(
                         border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
                     ) {
                         Text(
-                            text = if (speedup > 1.0) "${speedup}x Faster" else "Verified",
+                            text = if (speedup > 1.0) "⚡ ${speedup}x Faster" else "✓ Verified",
                             color = CppThemeSuccess,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                } else if (hasOptimization) {
+                    Surface(
+                        color = CppThemePrimarySubtle,
+                        shape = RoundedCornerShape(6.dp),
+                        border = BorderStroke(1.dp, CppThemePrimary.copy(alpha = 0.25f))
+                    ) {
+                        Text(
+                            text = "Optimized",
+                            color = CppThemePrimary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
@@ -350,7 +382,164 @@ private fun MetadataHeaderCard(
 }
 
 /**
- * Tab 1: Detailed Explanation View
+ * Tab 0: Overview (Web-Style Stacked View)
+ * Displays Explanation first at the top, then C++ Code block right underneath.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OverviewTabView(
+    explanation: String,
+    activeCode: String,
+    hasOptimization: Boolean,
+    optimizationVerified: Boolean,
+    speedup: Double,
+    bothAvailable: Boolean,
+    isViewingCommented: Boolean,
+    onToggleCodeView: (Boolean) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Section 1: Explanation
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Description,
+                        contentDescription = null,
+                        tint = CppThemePrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Explanation",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = CppThemeTextPrimary
+                    )
+                }
+                DocCopyButton(textToCopy = explanation, label = "Copy")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                color = CppThemeSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, CppThemeDivider),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = explanation.ifBlank { "No explanation generated for this snippet." },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = CppThemeTextPrimary,
+                    lineHeight = 24.sp,
+                    modifier = Modifier.padding(18.dp)
+                )
+            }
+        }
+
+        // Section 2: Code block
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Outlined.Code,
+                        contentDescription = null,
+                        tint = CppThemePrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (hasOptimization && !isViewingCommented) "Optimized C++ Code" else "Commented C++ Code",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = CppThemeTextPrimary
+                    )
+                    if (hasOptimization && !isViewingCommented && optimizationVerified) {
+                        Surface(
+                            color = CppThemeSuccessSubtle,
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
+                        ) {
+                            Text(
+                                text = if (speedup > 1.0) "${speedup}x Faster" else "Verified",
+                                color = CppThemeSuccess,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+                DocCopyButton(textToCopy = activeCode, label = "Copy Code")
+            }
+
+            if (bothAvailable) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    FilterChip(
+                        selected = !isViewingCommented,
+                        onClick = { onToggleCodeView(false) },
+                        label = { Text("⚡ Optimized Code", fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CppThemePrimarySubtle,
+                            selectedLabelColor = CppThemePrimary
+                        )
+                    )
+                    FilterChip(
+                        selected = isViewingCommented,
+                        onClick = { onToggleCodeView(true) },
+                        label = { Text("📝 Original Commented", fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = CppThemePrimarySubtle,
+                            selectedLabelColor = CppThemePrimary
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                color = CppThemeEditorDark,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = activeCode.ifBlank { "// No code available." },
+                    color = Color(0xFFE2E8F0),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.5.sp,
+                    lineHeight = 20.sp,
+                    modifier = Modifier
+                        .padding(18.dp)
+                        .horizontalScroll(rememberScrollState())
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+/**
+ * Tab 1: Detailed Explanation Only View
  */
 @Composable
 private fun ExplanationTabView(explanation: String) {
@@ -364,12 +553,23 @@ private fun ExplanationTabView(explanation: String) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Detailed Explanation",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = CppThemeTextPrimary
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = CppThemePrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Detailed Explanation",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = CppThemeTextPrimary
+                )
+            }
             DocCopyButton(textToCopy = explanation, label = "Copy")
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -392,138 +592,18 @@ private fun ExplanationTabView(explanation: String) {
 }
 
 /**
- * Tab 2: Documented C++ Code View
+ * Tab 2: Code Only View
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CommentedCodeTabView(code: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Commented Source Code",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = CppThemeTextPrimary
-            )
-            DocCopyButton(textToCopy = code, label = "Copy Code")
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        Surface(
-            color = CppThemeEditorDark,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = code.ifBlank { "// No commented code available." },
-                color = Color(0xFFE2E8F0),
-                fontFamily = FontFamily.Monospace,
-                fontSize = 12.5.sp,
-                lineHeight = 20.sp,
-                modifier = Modifier
-                    .padding(18.dp)
-                    .horizontalScroll(rememberScrollState())
-            )
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-    }
-}
-
-/**
- * Tab 3: Split View (Both explanation & code on one scrollable screen)
- */
-@Composable
-private fun SplitTabView(explanation: String, code: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Section 1: Explanation
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "1. Code Logic & Summary",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = CppThemeTextPrimary
-                )
-                DocCopyButton(textToCopy = explanation, label = "Copy")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Surface(
-                color = CppThemeSurface,
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, CppThemeDivider),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = explanation.ifBlank { "No explanation available." },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = CppThemeTextPrimary,
-                    lineHeight = 22.sp,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-        }
-
-        // Section 2: Code
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "2. Commented C++ Implementation",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = CppThemeTextPrimary
-                )
-                DocCopyButton(textToCopy = code, label = "Copy Code")
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Surface(
-                color = CppThemeEditorDark,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = code.ifBlank { "// No code available." },
-                    color = Color(0xFFE2E8F0),
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    lineHeight = 19.sp,
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .horizontalScroll(rememberScrollState())
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-    }
-}
-
-/**
- * Tab 4: Optimized Loop View (if recursion was rewritten)
- */
-@Composable
-private fun OptimizedLoopTabView(
+private fun CodeOnlyTabView(
     code: String,
-    verified: Boolean,
-    speedup: Double
+    hasOptimization: Boolean,
+    optimizationVerified: Boolean,
+    speedup: Double,
+    bothAvailable: Boolean,
+    isViewingCommented: Boolean,
+    onToggleCodeView: (Boolean) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -539,20 +619,26 @@ private fun OptimizedLoopTabView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Icon(
+                    Icons.Outlined.Code,
+                    contentDescription = null,
+                    tint = CppThemePrimary,
+                    modifier = Modifier.size(18.dp)
+                )
                 Text(
-                    text = "Iterative Loop Rewrite",
-                    style = MaterialTheme.typography.titleSmall,
+                    text = if (hasOptimization && !isViewingCommented) "Optimized C++ Source" else "Commented C++ Source",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = CppThemeTextPrimary
                 )
-                if (verified) {
+                if (hasOptimization && !isViewingCommented && optimizationVerified) {
                     Surface(
                         color = CppThemeSuccessSubtle,
                         shape = RoundedCornerShape(6.dp),
                         border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
                     ) {
                         Text(
-                            text = if (speedup > 1.0) "${speedup}x Faster" else "Verified Equivalent",
+                            text = if (speedup > 1.0) "${speedup}x Faster" else "Verified",
                             color = CppThemeSuccess,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
@@ -561,8 +647,36 @@ private fun OptimizedLoopTabView(
                     }
                 }
             }
-            DocCopyButton(textToCopy = code, label = "Copy Loop")
+            DocCopyButton(textToCopy = code, label = "Copy Code")
         }
+
+        if (bothAvailable) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                FilterChip(
+                    selected = !isViewingCommented,
+                    onClick = { onToggleCodeView(false) },
+                    label = { Text("⚡ Optimized Code", fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = CppThemePrimarySubtle,
+                        selectedLabelColor = CppThemePrimary
+                    )
+                )
+                FilterChip(
+                    selected = isViewingCommented,
+                    onClick = { onToggleCodeView(true) },
+                    label = { Text("📝 Original Commented", fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = CppThemePrimarySubtle,
+                        selectedLabelColor = CppThemePrimary
+                    )
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(10.dp))
         Surface(
             color = CppThemeEditorDark,
@@ -570,7 +684,7 @@ private fun OptimizedLoopTabView(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
-                text = code.ifBlank { "// No loop rewrite available." },
+                text = code.ifBlank { "// No code available." },
                 color = Color(0xFFE2E8F0),
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.5.sp,

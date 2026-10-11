@@ -107,7 +107,9 @@ data class OptimizeResponse(
     @SerializedName("speedup")
     val speedup: Double = 0.0,
     @SerializedName("note")
-    val note: String = ""
+    val note: String = "",
+    @SerializedName("explanation")
+    val explanation: String = ""
 )
 
 /**

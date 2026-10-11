@@ -1,8 +1,10 @@
 package com.secure.codereviewer.ui.screens.editor
 
-import android.app.Activity
+import android.content.ContentResolver
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -12,14 +14,26 @@ import com.secure.codereviewer.data.api.CodeValidationResponse
 import com.secure.codereviewer.data.api.OptimizeResponse
 import com.secure.codereviewer.data.api.SuggestedFix
 import com.secure.codereviewer.data.repository.CodeRepository
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private const val TAG = "EditorViewModel"
+private const val VALIDATION_DEBOUNCE_MS = 500L
 
 /**
  * ViewModel for EditorScreen managing code content, validation,
  * optimization, and analysis state.
  */
+@OptIn(FlowPreview::class)
 class EditorViewModel : ViewModel() {
     private val repository = CodeRepository()
 
@@ -39,7 +53,6 @@ class EditorViewModel : ViewModel() {
     var validationMessage by mutableStateOf<String?>(null)
     var validationErrorLine by mutableStateOf<Int?>(null)
     var currentSuggestedFix by mutableStateOf<SuggestedFix?>(null)
-    private var validationJob: Job? = null
 
     // --- Analysis State ---
     var isAnalyzing by mutableStateOf(false)
@@ -53,19 +66,43 @@ class EditorViewModel : ViewModel() {
     var showResultsSheet by mutableStateOf(false)
 
     /**
-     * Called whenever text changes in the editor.
-     * Triggers debounced validation so we don't spam the server on every keystroke.
+     * Bumped only when the ViewModel replaces the text (open file, auto-fix, new file...).
+     * The editor screen observes this to push text into the CodeEditor. Typing does NOT
+     * bump it, so we never copy the whole document back into the view per keystroke.
      */
-    fun updateContent(text: String) {
-        currentContent = text
-        scheduleValidation(text)
+    var externalContentVersion by mutableIntStateOf(0)
+        private set
+
+    /** Raw text stream; validation is derived from it with debounce + collectLatest. */
+    private val validationInput = MutableStateFlow("")
+
+    init {
+        viewModelScope.launch {
+            validationInput
+                .debounce(VALIDATION_DEBOUNCE_MS)   // wait for the user to pause typing
+                .distinctUntilChanged()             // skip if text didn't really change
+                .collectLatest { text -> validate(text) } // cancels in-flight request on new text
+        }
     }
 
-    /**
-     * Debounced syntax validation. Waits 500ms after user stops typing.
-     */
-    fun scheduleValidation(text: String) {
-        validationJob?.cancel()
+    /** Called by the editor (already debounced in the UI) with a fresh text snapshot. */
+    fun onEditorTextChanged(text: String) {
+        currentContent = text
+        validationInput.value = text
+    }
+
+    /** Make sure we work with the latest editor text before analyze/save. */
+    fun syncFromEditor(text: String?) {
+        if (text != null && text != currentContent) onEditorTextChanged(text)
+    }
+
+    private fun setContentFromViewModel(text: String) {
+        currentContent = text
+        externalContentVersion++
+        validationInput.value = text
+    }
+
+    private suspend fun validate(text: String) {
         if (text.isBlank()) {
             isSyntaxValid = true
             validationMessage = null
@@ -73,22 +110,20 @@ class EditorViewModel : ViewModel() {
             currentSuggestedFix = null
             return
         }
-
-        validationJob = viewModelScope.launch {
-            delay(500) // Wait for user to pause typing
-            isValidating = true
-            try {
-                val response: CodeValidationResponse = repository.validateCode(text)
-                isSyntaxValid = response.valid
-                validationMessage = response.message
-                validationErrorLine = response.line
-                currentSuggestedFix = response.suggested_fix
-            } catch (_: Exception) {
-                validationMessage = null
-                currentSuggestedFix = null
-            } finally {
-                isValidating = false
-            }
+        isValidating = true
+        try {
+            val response: CodeValidationResponse = repository.validateCode(text)
+            isSyntaxValid = response.valid
+            validationMessage = response.message
+            validationErrorLine = response.line
+            currentSuggestedFix = response.suggested_fix
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            validationMessage = null
+            currentSuggestedFix = null
+        } finally {
+            isValidating = false
         }
     }
 
@@ -97,66 +132,67 @@ class EditorViewModel : ViewModel() {
      */
     fun applySuggestedFix() {
         val fix = currentSuggestedFix ?: return
-        currentContent = fix.code
         currentSuggestedFix = null
         validationMessage = "Auto-fix applied"
         isSyntaxValid = true
-        scheduleValidation(fix.code)
+        setContentFromViewModel(fix.code)
     }
 
     /**
      * Open external or transferred code into the editor.
      */
     fun openContent(content: String, fileName: String = "main.cpp") {
-        currentContent = content
         currentFileName = fileName
         currentUri = null
         analysisError = null
         lastExplanation = null
         lastCommentedCode = null
         optimizationResult = null
-        scheduleValidation(content)
+        setContentFromViewModel(content)
     }
 
     /**
-     * Load file from device storage via Uri.
+     * Load file from device storage via Uri. Disk/provider I/O runs on Dispatchers.IO.
+     * Takes a ContentResolver (not an Activity) so the ViewModel never holds a UI reference.
      */
-    fun loadFile(uri: Uri, activity: Activity) {
-        try {
-            activity.contentResolver.openInputStream(uri)?.use { input ->
-                val content = input.bufferedReader().readText()
-                updateContent(content)
-                currentUri = uri
-                currentFileName = uri.lastPathSegment?.substringAfterLast('/') ?: "main.cpp"
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun loadFile(uri: Uri, resolver: ContentResolver) {
+        viewModelScope.launch {
+            val content = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                }.onFailure { Log.e(TAG, "Failed to read $uri", it) }.getOrNull()
+            } ?: return@launch
+            currentUri = uri
+            currentFileName = uri.lastPathSegment?.substringAfterLast('/') ?: "main.cpp"
+            setContentFromViewModel(content)
         }
     }
 
     /**
-     * Save code to specified device Uri.
+     * Save code to the given Uri on Dispatchers.IO; [onResult] is called on the main thread.
      */
-    fun saveToUri(uri: Uri, activity: Activity): Boolean {
-        return try {
-            activity.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(currentContent.toByteArray())
+    fun saveToUri(uri: Uri, resolver: ContentResolver, onResult: (Boolean) -> Unit = {}) {
+        val snapshot = currentContent
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    resolver.openOutputStream(uri, "wt")?.use { it.write(snapshot.toByteArray()) } != null
+                }.onFailure { Log.e(TAG, "Failed to save $uri", it) }.getOrDefault(false)
+            }
+            if (ok) {
                 currentUri = uri
                 currentFileName = uri.lastPathSegment?.substringAfterLast('/') ?: "main.cpp"
             }
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
+            onResult(ok)
         }
     }
 
-    fun saveCurrentFile(activity: Activity): Boolean {
-        return currentUri?.let { saveToUri(it, activity) } ?: false
+    fun saveCurrentFile(resolver: ContentResolver, onResult: (Boolean) -> Unit = {}) {
+        val uri = currentUri ?: return onResult(false)
+        saveToUri(uri, resolver, onResult)
     }
 
     fun newFile() {
-        currentContent = ""
         currentFileName = "main.cpp"
         currentUri = null
         analysisError = null
@@ -165,6 +201,7 @@ class EditorViewModel : ViewModel() {
         optimizationResult = null
         currentSuggestedFix = null
         validationMessage = null
+        setContentFromViewModel("")
     }
 
     /**
@@ -172,7 +209,7 @@ class EditorViewModel : ViewModel() {
      * Calls POST /analyze (English standard).
      * If optimization is toggled, also requests POST /optimize.
      */
-    fun analyzeCurrentCode(onAnalysisComplete: (AnalyzeResponse) -> Unit = {}) {
+    fun analyzeCurrentCode(onAnalysisComplete: (AnalyzeResponse, OptimizeResponse?) -> Unit = { _, _ -> }) {
         if (isAnalyzing || currentContent.isBlank()) return
         isAnalyzing = true
         analysisError = null
@@ -180,37 +217,47 @@ class EditorViewModel : ViewModel() {
         lastCommentedCode = null
         optimizationResult = null
 
+        val code = currentContent
+        val runOptimization = isOptimizationEnabled
+
         viewModelScope.launch {
             try {
-                // Step 1: Request analysis & explanation
-                val result = repository.analyzeCode(
-                    code = currentContent,
-                    outputLanguage = "english"
-                )
+                // /analyze and /optimize are independent: run them concurrently.
+                // coroutineScope = structured concurrency: if analysis fails, the
+                // optimization request is cancelled automatically.
+                val (result, opt) = coroutineScope {
+                    val optimization = if (runOptimization) {
+                        isOptimizing = true
+                        async {
+                            try {
+                                repository.optimizeCode(code)
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (_: Exception) {
+                                null // supplementary; keep analysis even if this fails
+                            } finally {
+                                isOptimizing = false
+                            }
+                        }
+                    } else null
+
+                    val analysis = repository.analyzeCode(code = code, outputLanguage = "english")
+                    analysis to optimization?.await()
+                }
+
                 lastExplanation = result.explanation
                 lastCommentedCode = result.commented_code
                 needsReview = result.needs_review
+                optimizationResult = opt
 
-                // Step 2: If recursion-to-loop optimization requested, run it
-                if (isOptimizationEnabled) {
-                    try {
-                        isOptimizing = true
-                        val opt = repository.optimizeCode(currentContent)
-                        optimizationResult = opt
-                    } catch (_: Exception) {
-                        // Optimization is supplementary; keep analysis result even if optimization fails
-                    } finally {
-                        isOptimizing = false
-                    }
-                }
-
-                // Step 3: Open results panel
                 selectedResultTab = 0
-                showResultsSheet = true
-                onAnalysisComplete(result)
+                onAnalysisComplete(result, opt)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 analysisError = e.message ?: "Failed to analyze code"
             } finally {
+                isOptimizing = false
                 isAnalyzing = false
             }
         }
@@ -221,7 +268,7 @@ class EditorViewModel : ViewModel() {
      * Directly calls POST /optimize to convert recursion to loop,
      * showing only the optimized rewrite and verification badges.
      */
-    fun optimizeCurrentCode() {
+    fun optimizeCurrentCode(onOptimizationComplete: (OptimizeResponse) -> Unit = {}) {
         if (isOptimizing || currentContent.isBlank()) return
         isOptimizing = true
         analysisError = null
@@ -231,8 +278,12 @@ class EditorViewModel : ViewModel() {
             try {
                 val opt = repository.optimizeCode(currentContent)
                 optimizationResult = opt
-                selectedResultTab = 2
-                showResultsSheet = true
+                if (opt.explanation.isNotBlank()) {
+                    lastExplanation = opt.explanation
+                }
+                lastCommentedCode = opt.code
+                selectedResultTab = 0
+                onOptimizationComplete(opt)
             } catch (e: Exception) {
                 analysisError = e.message ?: "Failed to optimize code"
             } finally {

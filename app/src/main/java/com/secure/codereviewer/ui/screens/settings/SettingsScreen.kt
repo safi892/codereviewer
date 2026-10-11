@@ -86,12 +86,6 @@ fun SettingsScreen(
                     subtitle = "Style, auto-save, and diagnostics",
                     onClick = {}
                 )
-//                SettingsItem(
-//                    icon = Icons.Default.Storage,
-//                    title = "Model selection",
-//                    subtitle = "CodeLlama-70b (Default)",
-//                    onClick = {}
-//                )
             }
 
             // About Section

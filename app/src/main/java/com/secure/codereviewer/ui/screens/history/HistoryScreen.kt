@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.secure.codereviewer.ui.components.AnalysisHistoryItem
 import com.secure.codereviewer.ui.theme.*
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 
 /**
  * HistoryScreen:
@@ -51,17 +53,37 @@ fun HistoryScreen(
     var query by remember { mutableStateOf("") }
     var selectedItemForDetail by remember { mutableStateOf<HistoryUiItem?>(null) }
 
-    val filteredItems = if (query.isBlank()) {
-        viewModel.items
-    } else {
-        viewModel.items.filter { item ->
-            item.title.contains(query, ignoreCase = true) ||
-                item.inputCode.contains(query, ignoreCase = true)
+    // Recomputed only when the query or the list changes, not on every recomposition.
+    val filteredItems by remember {
+        derivedStateOf {
+            val q = query.trim()
+            if (q.isBlank()) {
+                viewModel.items
+            } else {
+                viewModel.items.filter { item ->
+                    item.title.contains(q, ignoreCase = true) ||
+                        item.inputCode.contains(q, ignoreCase = true)
+                }
+            }
         }
     }
 
     LaunchedEffect(Unit) {
         viewModel.loadInitial()
+    }
+
+    // Infinite scroll: observe scroll position as a Flow instead of calling
+    // loadMore() during composition (a side effect that ran on every recomposition).
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val nearEnd = info.totalItemsCount > 0 && lastVisible >= info.totalItemsCount - 3
+            nearEnd to info.totalItemsCount
+        }
+            .distinctUntilChanged()
+            .filter { (nearEnd, _) -> nearEnd }
+            .collect { viewModel.loadMore() }
     }
 
     Scaffold(
@@ -197,7 +219,11 @@ fun HistoryScreen(
                         }
                     }
                     else -> {
-                        itemsIndexed(filteredItems) { index, historyItem ->
+                        itemsIndexed(
+                            items = filteredItems,
+                            key = { _, item -> item.id },
+                            contentType = { _, _ -> "history_row" }
+                        ) { index, historyItem ->
                             val relativeTime = formatRelativeTime(historyItem.createdAtEpochMs)
                             val sourceLabel = historyItem.source?.replaceFirstChar { it.uppercase() } ?: "Android"
 
@@ -214,10 +240,6 @@ fun HistoryScreen(
                                     modifier = Modifier.padding(horizontal = 20.dp),
                                     color = CppThemeDivider.copy(alpha = 0.6f)
                                 )
-                            }
-
-                            if (index >= filteredItems.lastIndex - 2) {
-                                viewModel.loadMore()
                             }
                         }
 

@@ -1,6 +1,5 @@
 package com.secure.codereviewer.ui.screens.editor
 
-import android.app.Activity
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -35,6 +34,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -42,6 +45,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.secure.codereviewer.ui.theme.*
 import com.secure.codereviewer.util.EditorSetup
 import io.github.rosemoe.sora.widget.CodeEditor
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.debounce
+
+private const val EDITOR_SYNC_DEBOUNCE_MS = 250L
+private const val DEFAULT_SNIPPET =
+    "// C++ Source Code\n#include <iostream>\n\nint main() {\n    std::cout << \"Hello World!\" << std::endl;\n    return 0;\n}"
 
 /**
  * EditorScreen:
@@ -52,7 +63,7 @@ import io.github.rosemoe.sora.widget.CodeEditor
  * - Inline recursive-to-loop optimization switch.
  * - Polished bottom results sheet with custom tab navigation and copy actions.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun EditorScreen(
     onBack: () -> Unit,
@@ -64,24 +75,30 @@ fun EditorScreen(
     onOpenDocumentation: ((explanation: String, commentedCode: String, optCode: String?, optVerified: Boolean, speedup: Double, optNote: String?, fileName: String) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    val activity = context as? Activity
+    val resolver = context.contentResolver
     val editorViewModel: EditorViewModel = viewModel()
     var editorRef by remember { mutableStateOf<CodeEditor?>(null) }
+
+    // Typing fires ContentChangeEvent on every keystroke. We only emit a cheap signal here
+    // and take ONE text snapshot after the user pauses, instead of copying the whole
+    // document + writing Compose state + recomposing the screen on every key press.
+    val editorChanges = remember {
+        MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    }
 
     val openFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
-        if (activity != null && uri != null) {
-            editorViewModel.loadFile(uri, activity)
-        }
+        if (uri != null) editorViewModel.loadFile(uri, resolver)
     }
 
     val saveFileLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/x-c++src")
     ) { uri: Uri? ->
-        if (activity != null && uri != null) {
-            if (editorViewModel.saveToUri(uri, activity)) {
-                onFileSaved(editorViewModel.currentFileName)
+        if (uri != null) {
+            editorViewModel.syncFromEditor(editorRef?.text?.toString())
+            editorViewModel.saveToUri(uri, resolver) { ok ->
+                if (ok) onFileSaved(editorViewModel.currentFileName)
             }
         }
     }
@@ -96,9 +113,34 @@ fun EditorScreen(
         }
     }
 
-    LaunchedEffect(editorViewModel.currentContent) {
-        if (editorRef?.text?.toString() != editorViewModel.currentContent) {
-            editorRef?.setText(editorViewModel.currentContent)
+    // Debounced editor -> ViewModel sync.
+    LaunchedEffect(editorChanges) {
+        editorChanges
+            .debounce(EDITOR_SYNC_DEBOUNCE_MS)
+            .collect {
+                editorRef?.takeIf { !it.isReleased }?.let { editor ->
+                    editorViewModel.onEditorTextChanged(editor.text.toString())
+                }
+            }
+    }
+
+    // ViewModel -> editor, only when the VM replaced the text (open/fix/new file).
+    LaunchedEffect(editorViewModel.externalContentVersion, editorRef) {
+        val editor = editorRef ?: return@LaunchedEffect
+        if (editorViewModel.externalContentVersion == 0) return@LaunchedEffect
+        editor.setText(editorViewModel.currentContent)
+    }
+
+    // Heavy TextMate language creation happens off the main thread, then is applied here.
+    LaunchedEffect(editorRef) {
+        val editor = editorRef ?: return@LaunchedEffect
+        val language = EditorSetup.createLanguage(context)
+        EditorSetup.applyTo(editor, language)
+    }
+
+    LaunchedEffect(editorViewModel.analysisError) {
+        editorViewModel.analysisError?.let { err ->
+            Toast.makeText(context, err, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -115,75 +157,72 @@ fun EditorScreen(
                     }
                 },
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    // Filename + save status stacked vertically. A side-by-side chip got
+                    // squeezed by the 4 action icons and wrapped one letter per line.
+                    val isSaved = editorViewModel.currentUri != null
+                    val statusColor = if (isSaved) CppThemeSuccess else CppThemeWarning
+                    Column(verticalArrangement = Arrangement.Center) {
                         Text(
                             editorViewModel.currentFileName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = CppThemeTextPrimary
+                            color = CppThemeTextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        // Status chip: Saved vs Unsaved
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = if (editorViewModel.currentUri == null)
-                                CppThemeWarningSubtle
-                            else
-                                CppThemeSuccessSubtle,
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                if (editorViewModel.currentUri == null)
-                                    CppThemeWarning.copy(alpha = 0.25f)
-                                else
-                                    CppThemeSuccess.copy(alpha = 0.25f)
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(statusColor)
+                            )
                             Text(
-                                text = if (editorViewModel.currentUri == null) "Unsaved" else "Saved",
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                                text = if (isSaved) "Saved" else "Unsaved",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
-                                color = if (editorViewModel.currentUri == null)
-                                    CppThemeWarning
-                                else
-                                    CppThemeSuccess
+                                color = statusColor,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        editorViewModel.newFile()
-                        editorRef?.setText("")
-                    }) {
-                        Icon(Icons.Default.Add, contentDescription = "New", tint = CppThemeTextSecondary)
-                    }
-                    IconButton(onClick = {
-                        openFileLauncher.launch(arrayOf("text/plain", "text/x-c++src"))
-                    }) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = "Open", tint = CppThemeTextSecondary)
-                    }
-                    IconButton(
+                    // Icon + small caption so each action's purpose is obvious.
+                    LabeledTopBarAction(
+                        icon = Icons.Default.Add,
+                        label = "New",
+                        onClick = { editorViewModel.newFile() }
+                    )
+                    LabeledTopBarAction(
+                        icon = Icons.Default.FolderOpen,
+                        label = "Open",
+                        onClick = { openFileLauncher.launch(arrayOf("text/plain", "text/x-c++src")) }
+                    )
+                    LabeledTopBarAction(
+                        icon = Icons.Default.Save,
+                        label = "Save",
+                        enabled = editorViewModel.currentUri != null,
                         onClick = {
-                            if (activity != null) {
-                                if (editorViewModel.saveCurrentFile(activity)) {
-                                    onFileSaved(editorViewModel.currentFileName)
-                                }
+                            editorViewModel.syncFromEditor(editorRef?.text?.toString())
+                            editorViewModel.saveCurrentFile(resolver) { ok ->
+                                if (ok) onFileSaved(editorViewModel.currentFileName)
                             }
-                        },
-                        enabled = editorViewModel.currentUri != null
-                    ) {
-                        Icon(
-                            Icons.Default.Save,
-                            contentDescription = "Save",
-                            tint = if (editorViewModel.currentUri != null) CppThemeTextSecondary else CppThemeTextTertiary
-                        )
-                    }
-                    IconButton(onClick = { saveFileLauncher.launch(editorViewModel.currentFileName) }) {
-                        Icon(Icons.Default.SaveAs, contentDescription = "Save As", tint = CppThemeTextSecondary)
-                    }
+                        }
+                    )
+                    LabeledTopBarAction(
+                        icon = Icons.Default.SaveAs,
+                        label = "Save As",
+                        onClick = {
+                            editorViewModel.syncFromEditor(editorRef?.text?.toString())
+                            saveFileLauncher.launch(editorViewModel.currentFileName)
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = CppThemeSurface,
@@ -217,17 +256,22 @@ fun EditorScreen(
                 AndroidView(
                     factory = { ctx ->
                         CodeEditor(ctx).apply {
-                            EditorSetup.configure(this, ctx)
-                            setText(
-                                editorViewModel.currentContent.ifEmpty {
-                                    "// C++ Source Code\n#include <iostream>\n\nint main() {\n    std::cout << \"Hello World!\" << std::endl;\n    return 0;\n}"
-                                }
-                            )
+                            // Only cheap view setup here; grammar/language load is async (see LaunchedEffect above).
+                            EditorSetup.applyBaseSettings(this)
+                            val initial = editorViewModel.currentContent.ifEmpty { DEFAULT_SNIPPET }
+                            setText(initial)
+                            // Keep VM in sync with what's shown (Analyze button needs non-blank content).
+                            editorViewModel.syncFromEditor(initial)
                             subscribeEvent(io.github.rosemoe.sora.event.ContentChangeEvent::class.java) { _, _ ->
-                                editorViewModel.updateContent(text.toString())
+                                editorChanges.tryEmit(Unit)
                             }
                             editorRef = this
                         }
+                    },
+                    onRelease = { editor ->
+                        // Stops Sora's background analyzer thread; avoids leaking the view.
+                        editorRef = null
+                        editor.release()
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -249,10 +293,12 @@ fun EditorScreen(
                     // Optimization switch row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // weight(1f): the label takes the remaining space and wraps,
+                        // instead of pushing the Switch off-screen.
                         Row(
+                            modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -267,21 +313,29 @@ fun EditorScreen(
                                     text = "Recursion to Loop Optimizer",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.Medium,
-                                    color = CppThemeTextPrimary
+                                    color = CppThemeTextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = "Rewrites recursive functions into loops with AST proof",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = CppThemeTextTertiary
+                                    color = CppThemeTextTertiary,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.width(12.dp))
                         Switch(
                             checked = editorViewModel.isOptimizationEnabled,
                             onCheckedChange = { editorViewModel.isOptimizationEnabled = it },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
-                                checkedTrackColor = CppThemePrimary
+                                checkedTrackColor = CppThemePrimary,
+                                uncheckedThumbColor = CppThemeTextSecondary,
+                                uncheckedTrackColor = CppThemeSurfaceMuted,
+                                uncheckedBorderColor = CppThemeTextTertiary
                             )
                         )
                     }
@@ -293,10 +347,29 @@ fun EditorScreen(
                     ) {
                         // Optimize Button (direct optimization without full analysis)
                         OutlinedButton(
-                            onClick = { editorViewModel.optimizeCurrentCode() },
+                            onClick = {
+                                editorViewModel.syncFromEditor(editorRef?.text?.toString())
+                                editorViewModel.optimizeCurrentCode { opt ->
+                                    if (onOpenDocumentation != null) {
+                                        onOpenDocumentation(
+                                            opt.explanation,
+                                            opt.code,
+                                            opt.code,
+                                            opt.verified,
+                                            opt.speedup,
+                                            opt.note,
+                                            editorViewModel.currentFileName
+                                        )
+                                    } else {
+                                        editorViewModel.showResultsSheet = true
+                                    }
+                                }
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp),
+                            // Default padding is 24dp per side, which left no room for the label.
+                            contentPadding = PaddingValues(horizontal = 12.dp),
                             shape = RoundedCornerShape(10.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, CppThemePrimary),
                             colors = ButtonDefaults.outlinedButtonColors(
@@ -314,7 +387,9 @@ fun EditorScreen(
                                 Text(
                                     "Optimizing...",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             } else {
                                 Icon(
@@ -326,17 +401,42 @@ fun EditorScreen(
                                 Text(
                                     "Optimize",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
 
                         // Primary Run Analysis Action
                         Button(
-                            onClick = { editorViewModel.analyzeCurrentCode() },
+                            onClick = {
+                                editorViewModel.syncFromEditor(editorRef?.text?.toString())
+                                editorViewModel.analyzeCurrentCode { result, opt ->
+                                    if (onOpenDocumentation != null) {
+                                        val finalExplanation = if (result.explanation.isNotBlank()) {
+                                            result.explanation
+                                        } else {
+                                            opt?.explanation ?: ""
+                                        }
+                                        onOpenDocumentation(
+                                            finalExplanation,
+                                            result.commented_code,
+                                            opt?.code,
+                                            opt?.verified ?: false,
+                                            opt?.speedup ?: 0.0,
+                                            opt?.note,
+                                            editorViewModel.currentFileName
+                                        )
+                                    } else {
+                                        editorViewModel.showResultsSheet = true
+                                    }
+                                }
+                            },
                             modifier = Modifier
-                                .weight(1.4f)
+                                .weight(1f)
                                 .height(50.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = CppThemePrimary,
                                 contentColor = Color.White
@@ -352,9 +452,11 @@ fun EditorScreen(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    "Analyzing Code...",
+                                    "Analyzing...",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             } else {
                                 Icon(
@@ -365,6 +467,8 @@ fun EditorScreen(
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     "Analyze Code",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -390,6 +494,41 @@ fun EditorScreen(
                 onOpenDocumentation = onOpenDocumentation
             )
         }
+    }
+}
+
+/**
+ * Top bar action with a small caption under the icon.
+ * 48dp min touch target; the caption doubles as the accessibility label.
+ */
+@Composable
+private fun LabeledTopBarAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    val tint = if (enabled) CppThemeTextSecondary else CppThemeTextTertiary
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = tint,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }
 
