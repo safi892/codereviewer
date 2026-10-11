@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.secure.codereviewer.ui.theme.*
@@ -193,7 +194,6 @@ fun DocumentationScreen(
                         hasOptimization = hasOptimization,
                         optimizationVerified = optimizationVerified,
                         speedup = speedup,
-                        optimizationNote = optimizationNote,
                         bothAvailable = bothAvailable,
                         isViewingCommented = isViewingCommented,
                         onToggleCodeView = { isViewingCommented = it }
@@ -204,7 +204,6 @@ fun DocumentationScreen(
                         hasOptimization = hasOptimization,
                         optimizationVerified = optimizationVerified,
                         speedup = speedup,
-                        optimizationNote = optimizationNote,
                         bothAvailable = bothAvailable,
                         isViewingCommented = isViewingCommented,
                         onToggleCodeView = { isViewingCommented = it }
@@ -260,7 +259,6 @@ private fun OverviewTabView(
     hasOptimization: Boolean,
     optimizationVerified: Boolean,
     speedup: Double,
-    optimizationNote: String?,
     bothAvailable: Boolean,
     isViewingCommented: Boolean,
     onToggleCodeView: (Boolean) -> Unit
@@ -322,6 +320,7 @@ private fun OverviewTabView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f, fill = false),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -332,10 +331,12 @@ private fun OverviewTabView(
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = if (hasOptimization && !isViewingCommented) "Optimized C++ Code" else "Commented C++ Code",
+                        text = if (hasOptimization && !isViewingCommented) "Optimized C++" else "Commented C++",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = CppThemeTextPrimary
+                        color = CppThemeTextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (hasOptimization && !isViewingCommented && optimizationVerified) {
                         Surface(
@@ -344,7 +345,7 @@ private fun OverviewTabView(
                             border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
                         ) {
                             Text(
-                                text = if (speedup > 1.0) "⚡ ${speedup}x Faster" else "✓ Verified",
+                                text = if (speedup > 1.0) "⚡ ${speedup}x" else "✓ Verified",
                                 color = CppThemeSuccess,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
@@ -353,24 +354,8 @@ private fun OverviewTabView(
                         }
                     }
                 }
-                DocCopyButton(textToCopy = activeCode, label = "Copy Code")
-            }
-
-            if (!optimizationNote.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Surface(
-                    color = CppThemeSurfaceMuted,
-                    shape = RoundedCornerShape(8.dp),
-                    border = BorderStroke(1.dp, CppThemeDivider),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Optimization: $optimizationNote",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = CppThemeTextSecondary,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
+                Spacer(modifier = Modifier.width(8.dp))
+                DocCopyButton(textToCopy = activeCode, label = "Copy")
             }
 
             if (bothAvailable) {
@@ -487,7 +472,6 @@ private fun CodeOnlyTabView(
     hasOptimization: Boolean,
     optimizationVerified: Boolean,
     speedup: Double,
-    optimizationNote: String?,
     bothAvailable: Boolean,
     isViewingCommented: Boolean,
     onToggleCodeView: (Boolean) -> Unit
@@ -503,6 +487,7 @@ private fun CodeOnlyTabView(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
+                modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -513,10 +498,12 @@ private fun CodeOnlyTabView(
                     modifier = Modifier.size(18.dp)
                 )
                 Text(
-                    text = if (hasOptimization && !isViewingCommented) "Optimized C++ Source" else "Commented C++ Source",
+                    text = if (hasOptimization && !isViewingCommented) "Optimized C++" else "Commented C++",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = CppThemeTextPrimary
+                    color = CppThemeTextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 if (hasOptimization && !isViewingCommented && optimizationVerified) {
                     Surface(
@@ -525,7 +512,7 @@ private fun CodeOnlyTabView(
                         border = BorderStroke(1.dp, CppThemeSuccess.copy(alpha = 0.25f))
                     ) {
                         Text(
-                            text = if (speedup > 1.0) "⚡ ${speedup}x Faster" else "✓ Verified",
+                            text = if (speedup > 1.0) "⚡ ${speedup}x" else "✓ Verified",
                             color = CppThemeSuccess,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
@@ -534,24 +521,8 @@ private fun CodeOnlyTabView(
                     }
                 }
             }
-            DocCopyButton(textToCopy = code, label = "Copy Code")
-        }
-
-        if (!optimizationNote.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Surface(
-                color = CppThemeSurfaceMuted,
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, CppThemeDivider),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = "Optimization: $optimizationNote",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = CppThemeTextSecondary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                )
-            }
+            Spacer(modifier = Modifier.width(8.dp))
+            DocCopyButton(textToCopy = code, label = "Copy")
         }
 
         if (bothAvailable) {
@@ -605,9 +576,10 @@ private fun CodeOnlyTabView(
 
 /**
  * Tactile copy button with toast feedback.
+ * Guaranteed never to wrap or squish vertically.
  */
 @Composable
-private fun DocCopyButton(textToCopy: String, label: String) {
+private fun DocCopyButton(textToCopy: String, label: String = "Copy") {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
@@ -618,10 +590,11 @@ private fun DocCopyButton(textToCopy: String, label: String) {
                 Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
             }
         },
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(1.dp, CppThemeDivider),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = CppThemeTextPrimary)
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = CppThemeTextPrimary),
+        modifier = Modifier.height(32.dp)
     ) {
         Icon(
             Icons.Outlined.ContentCopy,
@@ -629,11 +602,13 @@ private fun DocCopyButton(textToCopy: String, label: String) {
             modifier = Modifier.size(13.dp),
             tint = CppThemeTextSecondary
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
